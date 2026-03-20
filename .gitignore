@@ -1,0 +1,33 @@
+# Credenciais — NUNCA commitar
+.env
+
+# Banco de dados local (substituído pelo Supabase)
+*.db
+
+# Ambiente virtual Python
+venv/
+.venv/
+env/
+
+# Cache Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# PDFs temporários e processados
+temp_*.pdf
+simulado_gerado.pdf
+teste_simulado.pdf
+
+# Imagens extraídas de questões
+question_images/
+
+# VS Code
+.vscode/
+
+# OS gerado
+.DS_Store
+Thumbs.db
+
+# Streamlit cache local
+.streamlit/secrets.toml

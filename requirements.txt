@@ -1,0 +1,7 @@
+streamlit
+pymupdf
+google-generativeai
+python-dotenv
+fpdf2
+sqlalchemy
+psycopg2-binary
