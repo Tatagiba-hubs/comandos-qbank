@@ -22,8 +22,9 @@ import pandas as pd
 from database import (init_db, insert_question, get_all_questions,
                       update_resolution, is_pdf_cached, mark_pdf_cached,
                       export_to_json, export_to_csv,
-                      save_performance, get_performance_stats)
-from ai_extractor import extract_questions_from_pdf, generate_resolution
+                      save_performance, get_performance_stats,
+                      get_user_badges, award_badge)
+from ai_extractor import extract_questions_from_pdf, generate_resolution, generate_custom_questions, analyze_discursive_image, evaluate_essay
 from pdf_generator import generate_simulado_pdf
 
 st.set_page_config(page_title="COMANDOS QBANK", page_icon="🗡️", layout="wide")
@@ -140,6 +141,104 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+# ── UI MAKEOVER: PREMIUM MILITARY THEME (VIP) ──────────────────────────────────
+st.markdown("""
+<style>
+    /* Global Theme & Premium Fonts */
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700;900&family=JetBrains+Mono&display=swap');
+    
+    .stApp {
+        background: radial-gradient(circle at top right, #11141a, #07090c);
+        color: #f0f0f0;
+    }
+
+    /* Glassmorphism for Containers */
+    [data-testid="stVerticalBlock"] > div:has(div.stExpander), 
+    [data-testid="stForm"] {
+        background: rgba(255, 255, 255, 0.03);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(75, 83, 32, 0.3);
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    }
+    
+    /* Headers with Gold Accents */
+    h1, h2, h3 {
+        color: #d4af37 !important;
+        font-family: 'Outfit', sans-serif !important;
+        text-transform: uppercase;
+        letter-spacing: 3px;
+        font-weight: 900 !important;
+        text-shadow: 0 0 10px rgba(212, 175, 55, 0.2);
+        border-left: 5px solid #4b5320;
+        padding-left: 15px !important;
+        background: linear-gradient(to right, rgba(75, 83, 32, 0.1), transparent);
+    }
+    
+    /* Tactical Buttons */
+    .stButton>button {
+        background: linear-gradient(135deg, #2e3317 0%, #4b5320 100%) !important;
+        color: #d4af37 !important;
+        border: 1px solid #d4af37 !important;
+        border-radius: 6px !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 1px;
+        height: 48px;
+        box-shadow: inset 0 0 5px rgba(212,175,55,0.1);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    }
+    .stButton>button:hover {
+        background: #d4af37 !important;
+        color: #07090c !important;
+        box-shadow: 0 0 20px rgba(212, 175, 55, 0.5);
+        transform: translateY(-2px);
+    }
+    
+    /* Premium Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 20px;
+        padding: 10px;
+        background: rgba(0,0,0,0.3);
+        border-radius: 15px;
+        border: 1px solid #2e3317;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 60px;
+        background-color: transparent !important;
+        border: none !important;
+        color: #888 !important;
+        font-size: 1.1rem !important;
+        font-weight: 400 !important;
+    }
+    .stTabs [aria-selected="true"] {
+        color: #d4af37 !important;
+        font-weight: 900 !important;
+        border-bottom: 3px solid #d4af37 !important;
+        text-shadow: 0 0 8px rgba(212,175,55,0.4);
+    }
+
+    /* Sidebar Dashboard Look */
+    section[data-testid="stSidebar"] {
+        background-color: #0c0e12;
+        border-right: 1px solid #d4af3755;
+    }
+    section[data-testid="stSidebar"] .stMarkdown h2 {
+        border-left: none;
+        text-align: center;
+        margin-bottom: 20px;
+    }
+
+    /* Cards Simulation */
+    .css-1r6p8d1 { 
+        background-color: rgba(30,30,30,0.5); 
+        border-radius: 10px;
+        padding: 15px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # ── LOGIN WALL ────────────────────────────────────────────────────────────────
 if st.session_state["user"] is None:
     st.markdown("<h2 style='text-align: center'>🛡️ Acesso Restrito ao Quartel General</h2>", unsafe_allow_html=True)
@@ -177,6 +276,7 @@ if st.session_state["user"] is None:
                         
     st.stop() # Bloqueia o render do resto do app
 
+
 # ── SIDEBAR (Perfil e XP) ─────────────────────────────────────────────────────
 user_info = st.session_state["user"]
 rank, pts = get_user_rank(user_info['id'], user_info['role'])
@@ -186,6 +286,12 @@ with st.sidebar:
     st.markdown(f"**NOME:** {user_info['username'].upper()}")
     if user_info['role'] != 'admin':
         st.markdown(f"**XP COMBATE:** {pts} pts")
+        
+        badges = get_user_badges(user_info['id'])
+        if badges:
+            st.markdown("🎖️ **CONDECORAÇÕES:**")
+            for b in badges:
+                st.caption(f"- {b['badge_name']}")
     else:
         st.markdown("👑 **COMANDO SUPREMO**")
         
@@ -194,13 +300,17 @@ with st.sidebar:
         st.session_state["user"] = None
         st.rerun()
 
-# ── LOGIC FOR ROLE TABS ───────────────────────────────────────────────────────
+# ── LOGIC FOR TABS (New Global Order) ─────────────────────────────────────────
+common_labels = ["🔍 Arsenal", "📄 Missões", "💻 Campo Treino", "🤖 Lista IA", "✍️ Redação", "⚔️ Duelo", "🎖️ Ficha"]
 if user_info['role'] == 'admin':
-    tabs = st.tabs(["📤 Infiltração (Add PDF)", "🔍 Arsenal de Questões", "📄 Gerar Operação", "💻 Campo de Treino", "📊 Inteligência", "⚙️ Sala de Guerra", "👥 Recrutamento"])
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = tabs
+    tabs_obj = st.tabs(["📤 Infiltração"] + common_labels + ["⚙️ Config", "👥 Tropa"])
+    tab1, tab2, tab3, tab4, tab_ai_list, tab_redacao, tab_duelo, tab5, tab6, tab7 = tabs_obj
 else:
-    tabs = st.tabs(["🔍 Arsenal de Questões", "📄 Gerar Missão", "💻 Campo de Treino", "📊 Minha Ficha"])
-    tab2, tab3, tab4, tab5 = tabs
+    tabs_obj = st.tabs(common_labels)
+    tab2, tab3, tab4, tab_ai_list, tab_redacao, tab_duelo, tab5 = tabs_obj
+    tab1 = None
+    tab6 = None
+    tab7 = None
 
 # ── Tab 1: Upload PDF (ADMIN ONLY) ──────────────────────────────────────────────
 if user_info['role'] == 'admin':
@@ -242,20 +352,10 @@ if user_info['role'] == 'admin':
                             f.write(file_bytes)
 
                         try:
-                            questions_data: List[Dict[str, Any]] = extract_questions_from_pdf(temp_path, update_progress)
-                            loading_placeholder.empty()
-                            progress_bar.progress(100, text="EXTRAÇÃO CONCLUÍDA! 100%")
-                        
-                            # Notificação sonora de sucesso
-                            success_sound = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"
-                            st.markdown(f'<audio src="{success_sound}" autoplay></audio>', unsafe_allow_html=True)
-
-                            if not questions_data:
-                                st.warning("IA nao conseguiu extrair questoes no formato correto.")
-                            else:
-                                st.success(f"{len(questions_data)} questoes extraidas e lidas!")
-
-                                for q in questions_data:
+                            total_extracted = 0
+                            # Iterate over the generator to get questions chunk by chunk
+                            for questions_chunk in extract_questions_from_pdf(temp_path, update_progress):
+                                for q in questions_chunk:
                                     exam = q.get('exam_origin', 'Desconhecido')
                                     year = q.get('year', '')
                                     subj = q.get('subject', 'Geral')
@@ -269,9 +369,22 @@ if user_info['role'] == 'admin':
                                     has_img = bool(q.get('has_image', False))
 
                                     insert_question(exam, year, subj, diff, text, opts, ans, res1, res2, img_path, has_img)
+                                    total_extracted += 1
+                                
+                                st.toast(f"📥 {len(questions_chunk)} questões salvas no Arsenal!")
 
-                                mark_pdf_cached(file_hash, uploaded_file.name, len(questions_data))
-                                st.info("Missao cumprida! As questoes foram salvas no Banco de Dados.")
+                            loading_placeholder.empty()
+                            progress_bar.progress(100, text="EXTRAÇÃO CONCLUÍDA! 100%")
+                        
+                            # Notificação sonora de sucesso
+                            success_sound = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"
+                            st.markdown(f'<audio src="{success_sound}" autoplay></audio>', unsafe_allow_html=True)
+
+                            if total_extracted == 0:
+                                st.warning("IA nao conseguiu extrair questoes no formato correto.")
+                            else:
+                                mark_pdf_cached(file_hash, uploaded_file.name, total_extracted)
+                                st.success(f"Missão cumprida! {total_extracted} questões foram lidas e salvas no Arsenal.")
                                 time.sleep(2)
                                 st.rerun() # Refresh to clear progress UI
                         except Exception as e:
@@ -294,11 +407,20 @@ with tab2:
     else:
         st.write(f"Total de questoes cadastradas: **{len(all_questions)}**")
 
-        subjects = sorted(list(set([q['subject'] for q in all_questions])))
-        selected_subj = st.selectbox("Filtrar por Materia", ["Todas"] + subjects)
+        subjects = sorted(list(set([q['subject'] for q in all_questions if q.get('subject')])))
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            selected_subj = st.selectbox("Filtrar por Materia", ["Todas"] + subjects)
+        with col_f2:
+            subtopics_opts = ["Todos"]
+            if selected_subj != "Todas":
+                subtopics_opts += sorted(list(set([q.get('subtopic', '') for q in all_questions if q.get('subject') == selected_subj and q.get('subtopic')])))
+            selected_subtopic = st.selectbox("Filtrar por Subtópico", subtopics_opts)
 
         for q in all_questions:
-            if selected_subj != "Todas" and q['subject'] != selected_subj:
+            if selected_subj != "Todas" and q.get('subject') != selected_subj:
+                continue
+            if selected_subtopic != "Todos" and q.get('subtopic') != selected_subtopic:
                 continue
 
             with st.expander(f"[{q['subject']}] {q['exam_origin']} {q['year']} - Dificuldade: {q['difficulty']}"):
@@ -358,19 +480,28 @@ with tab3:
     if sim_questions:
         sim_subjects = sorted(list(set([q['subject'] for q in sim_questions])))
         with st.form("simulado_form"):
-            col1, col2 = st.columns(2)
+            col1, col2, col3 = st.columns(3)
             with col1:
                 sim_subj = st.selectbox("Materia", ["Todas"] + sim_subjects)
             with col2:
+                sim_subtopics = ["Todos"]
+                if sim_subj != "Todas":
+                    sim_subtopics += sorted(list(set([q.get('subtopic', '') for q in sim_questions if q.get('subject') == sim_subj and q.get('subtopic')])))
+                sim_subtopic = st.selectbox("Subtópico", sim_subtopics)
+            with col3:
                 sim_diff = st.selectbox("Dificuldade", ["Todas", "Facil", "Medio", "Dificil"])
 
-            num_questions = st.number_input("Numero de questoes", min_value=1, max_value=50, value=10)
-            espaco_resolucao = st.checkbox("Deixar espaço em branco entre questões (para rascunho com caneta)", value=True)
+            col_a, col_b = st.columns([1,2])
+            with col_a:
+                num_questions = st.number_input("Numero de questoes", min_value=1, max_value=50, value=10)
+            with col_b:
+                espaco_resolucao = st.checkbox("Deixar espaço em branco entre questões (para rascunho com caneta)", value=True)
             submitted = st.form_submit_button("Gerar PDF")
 
         if submitted:
-            filtered = [q for q in sim_questions if (sim_subj == "Todas" or q['subject'] == sim_subj)]
-            filtered = [q for q in filtered if (sim_diff == "Todas" or q['difficulty'] == sim_diff)]
+            filtered = [q for q in sim_questions if (sim_subj == "Todas" or q.get('subject') == sim_subj)]
+            filtered = [q for q in filtered if (sim_subtopic == "Todos" or q.get('subtopic') == sim_subtopic)]
+            filtered = [q for q in filtered if (sim_diff == "Todas" or q.get('difficulty') == sim_diff)]
 
             if len(filtered) < num_questions:
                 st.warning(f"Foram encontradas apenas {len(filtered)} questoes com esses filtros.")
@@ -396,32 +527,48 @@ with tab3:
     else:
         st.info("Nenhuma questao no banco. Faca o upload de provas primeiro.")
 
-# ── Tab 4: Simulado Online ────────────────────────────────────────────────────
+# ── Tab 4: Campo de Treino ────────────────────────────────────────────────────
 with tab4:
-    st.header("Simulado Online")
+    st.header("💻 Campo de Treino")
     st.markdown("Treine direto no aplicativo contra a máquina e guarde seu desempenho no banco de dados!")
     
-    if "current_online_test" not in st.session_state:
-        st.session_state["current_online_test"] = None
+    subtab_obj, subtab_disc = st.tabs(["🎯 Simulado Objetivo", "✍️ Treino Discursivo"])
+    
+    with subtab_obj:
+        if "current_online_test" not in st.session_state:
+            st.session_state["current_online_test"] = None
 
     if not st.session_state["current_online_test"]:
         sim_questions_online: List[Dict[str, Any]] = get_all_questions()
         if sim_questions_online:
             sim_subjects_online = sorted(list(set([q['subject'] for q in sim_questions_online])))
             with st.form("online_simulado_form"):
-                col1, col2 = st.columns(2)
+                col1, col2, col3 = st.columns(3)
                 with col1:
                     sim_subj_online = st.selectbox("Materia (Online)", ["Todas"] + sim_subjects_online)
                 with col2:
+                    sim_subtopic_opts = ["Todos"]
+                    if sim_subj_online != "Todas":
+                        sim_subtopic_opts += sorted(list(set([q.get('subtopic', '') for q in sim_questions_online if q.get('subject') == sim_subj_online and q.get('subtopic')])))
+                    sim_subtopic_online = st.selectbox("Subtópico (Online)", sim_subtopic_opts)
+                with col3:
                     sim_diff_online = st.selectbox("Dificuldade (Online)", ["Todas", "Facil", "Medio", "Dificil"])
+
+                st.markdown("---")
+                morte_subita = st.checkbox("💀 Morte Súbita (O teste acaba no seu primeiro erro!)")
+                cronometrado = st.checkbox("⏱️ Missão Cronometrada (Seja rápido!)")
+                tempo_minutos = 60
+                if cronometrado:
+                    tempo_minutos = st.number_input("Duração da Missão (Minutos)", min_value=1, max_value=300, value=60)
 
                 num_questions_online = st.number_input("Numero de questoes", min_value=1, max_value=50, value=10, key="num_online")
                 submitted_online = st.form_submit_button("Iniciar Missão!")
 
             if submitted_online:
                 import random
-                filtered_online = [q for q in sim_questions_online if (sim_subj_online == "Todas" or q['subject'] == sim_subj_online)]
-                filtered_online = [q for q in filtered_online if (sim_diff_online == "Todas" or q['difficulty'] == sim_diff_online)]
+                filtered_online = [q for q in sim_questions_online if (sim_subj_online == "Todas" or q.get('subject') == sim_subj_online)]
+                filtered_online = [q for q in filtered_online if (sim_subtopic_online == "Todos" or q.get('subtopic') == sim_subtopic_online)]
+                filtered_online = [q for q in filtered_online if (sim_diff_online == "Todas" or q.get('difficulty') == sim_diff_online)]
                 
                 if len(filtered_online) < num_questions_online:
                     st.warning(f"Foram encontradas apenas {len(filtered_online)} questoes com esses filtros.")
@@ -431,6 +578,10 @@ with tab4:
                     
                 if selected:
                     st.session_state["current_online_test"] = selected
+                    st.session_state["morte_subita"] = morte_subita
+                    st.session_state["cronometrado"] = cronometrado
+                    st.session_state["start_time"] = time.time() if cronometrado else None
+                    st.session_state["tempo_prova"] = tempo_minutos * 60 if cronometrado else None
                     st.rerun()
         else:
             st.info("Nenhuma questao no banco. Faça upload de provas primeiro.")
@@ -440,6 +591,34 @@ with tab4:
         total_q = len(online_test_qs)
         st.info(f"Modo Prova Ativo: {total_q} questoes. Foco total!")
         
+        if st.session_state.get("cronometrado") and st.session_state.get("start_time") and st.session_state.get("tempo_prova"):
+            elapsed_init = time.time() - st.session_state["start_time"]
+            remaining = max(0, st.session_state["tempo_prova"] - elapsed_init)
+            
+            # Timer JS Injection
+            timer_html = f"""
+            <div style="background-color: #1a1a1a; color: #ff3333; font-family: monospace; font-size: 24px; font-weight: bold; text-align: center; padding: 10px; border-radius: 5px; border: 1px solid #ff3333; margin-bottom: 20px;" id="mission_timer">
+                00:00:00
+            </div>
+            <script>
+                var timeLeft = {remaining};
+                var timerEl = document.getElementById('mission_timer');
+                var timerInterval = setInterval(function() {{
+                    if (timeLeft <= 0) {{
+                        clearInterval(timerInterval);
+                        timerEl.innerHTML = "TEMPO ESGOTADO! RECOLHER PROVA!";
+                        return;
+                    }}
+                    timeLeft -= 1;
+                    var h = Math.floor(timeLeft / 3600);
+                    var m = Math.floor((timeLeft % 3600) / 60);
+                    var s = Math.floor(timeLeft % 60);
+                    timerEl.innerHTML = "⏱️ TEMPO RESTANTE: " + (h < 10 ? "0"+h : h) + ":" + (m < 10 ? "0"+m : m) + ":" + (s < 10 ? "0"+s : s);
+                }}, 1000);
+            </script>
+            """
+            st.components.v1.html(timer_html, height=70)
+
         if st.button("Cancelar Missão ❌"):
             st.session_state["current_online_test"] = None
             st.rerun()
@@ -463,25 +642,117 @@ with tab4:
             
             if finalizar:
                 acertos = 0
+                respondidas = 0
                 for idx, q_test in enumerate(online_test_qs):
                     ans_str = st.session_state.get(f"ans_q_{q_test['id']}")
                     if ans_str:
+                        respondidas += 1
                         letter = ans_str.split(")")[0]
                         correct = (letter == q_test['correct_answer_letter'])
                         if correct:
                             acertos += 1
-                        # Save performance securely to the database (linked to user_id)
+                        
                         save_performance(q_test['id'], letter, correct, user_info['id'])
+
+                        if not correct and st.session_state.get("morte_subita"):
+                            st.error(f"💀 MORTE SÚBITA! Você foi abatido na Questão {idx + 1}. A missão foi abortada e as demais não contaram.")
+                            break
+                            
+                pct = (acertos / respondidas) * 100 if respondidas > 0 else 0
+                st.success(f"Prova finalizada! Sua performance foi gravada. Você acertou {acertos} de {respondidas} que respondeu ({pct:.1f}%).")
                 
-                pct = (acertos / total_q) * 100
-                st.success(f"Prova finalizada! Sua performance foi gravada. Você acertou {acertos} de {total_q} questoes ({pct:.1f}%).")
+                # Gamificacao / Badges
+                earned_badges = []
+                if respondidas >= 5 and acertos == respondidas and award_badge(user_info['id'], "Atirador de Elite (100% Acertos)"):
+                    earned_badges.append("Atirador de Elite (100% Acertos)")
+                
+                if st.session_state.get("morte_subita") and acertos >= 5 and award_badge(user_info['id'], "Sobrevivente Nato (5+ em Morte Súbita)"):
+                    earned_badges.append("Sobrevivente Nato (5+ em Morte Súbita)")
+                    
+                if st.session_state.get("cronometrado"):
+                     elapsed = time.time() - st.session_state.get("start_time", time.time())
+                     minutos = int(elapsed // 60)
+                     segundos = int(elapsed % 60)
+                     st.info(f"⏱️ Tempo de missão concluído: {minutos}m {segundos}s")
+                     # Se foi rapido (< 1min por questao) e acertou bem
+                     if elapsed < (respondidas * 60) and pct >= 70 and award_badge(user_info['id'], "Veloz e Furioso (Missão Cronometrada)"):
+                          earned_badges.append("Veloz e Furioso (Missão Cronometrada)")
+                          
+                if earned_badges:
+                    st.toast(f"🎖️ Novas condecorações ganhas: {', '.join(earned_badges)}")
+
                 if pct >= 70:
                     st.balloons()
                 else:
                     st.snow()
                 st.session_state["current_online_test"] = None
-                time.sleep(3)
+                time.sleep(4)
                 st.rerun()
+
+    with subtab_disc:
+        st.subheader("✍️ Treinamento Discursivo")
+        st.markdown("Escreva uma questão, anexe uma foto da sua resolução escrita em papel, e a Inteligência fará a avaliação do seu raciocínio.")
+        
+        with st.form("discursive_form"):
+            disc_question = st.text_area("Enunciado da Questão Discursiva", height=150, placeholder="Digite o enunciado completo aqui...")
+            disc_image = st.file_uploader("Sua resolução manuscrita (Opcional)", type=["png", "jpg", "jpeg"])
+            
+            disc_submit = st.form_submit_button("Submeter para Avaliação")
+            
+        if disc_submit:
+            if not disc_question.strip():
+                st.warning("O enunciado da questão é obrigatório para a avaliação.")
+            elif not os.getenv("GEMINI_API_KEY"):
+                st.error("Chave de API do Gemini não configurada! Vá na aba 'Configurações' primeiro.")
+            else:
+                with st.spinner("A Banca está avaliando seu raciocínio matemático..."):
+                    img_bytes = disc_image.getvalue() if disc_image else None
+                    result = analyze_discursive_image(disc_question, img_bytes)
+                    
+                    st.markdown("### 📋 Parecer da Banca Avaliadora")
+                    st.info(result)
+
+# ── Tab: Sala de Redação ──────────────────────────────────────────────────────
+with tab_redacao:
+    st.header("✍️ Sala de Redação")
+    st.markdown("Submeta sua redação para correção imediata pela IA, baseada em critérios oficiais de concursos militares.")
+    
+    with st.form("redacao_form"):
+        tema_red = st.text_input("Tema da Redação", placeholder="Ex: A importância das Forças Armadas na defesa da Amazônia")
+        texto_red = st.text_area("Seu Texto", height=300, placeholder="Digite ou cole sua redação aqui...")
+        imagem_red = st.file_uploader("Foto da Folha de Redação (Opcional)", type=["png", "jpg", "jpeg"])
+        
+        red_submit = st.form_submit_button("🔨 Enviar para Correção")
+        
+    if red_submit:
+        if not texto_red.strip() and not imagem_red:
+            st.warning("Envie o texto ou uma foto da redação.")
+        elif not os.getenv("GEMINI_API_KEY"):
+            st.error("Chave de API não configurada.")
+        else:
+            with st.spinner("O Tenente Corretor está analisando sua redação..."):
+                img_bytes = imagem_red.getvalue() if imagem_red else None
+                feedback = evaluate_essay(texto_red, tema_red, img_bytes)
+                st.markdown("### 📝 Feedback do Corretor")
+                st.info(feedback)
+
+# ── Tab: Duelo Tático ─────────────────────────────────────────────────────────
+with tab_duelo:
+    st.header("⚔️ Duelo Tático (Rapid Fire)")
+    st.markdown("Teste seus reflexos e precisão. Você tem apenas **30 segundos** por questão!")
+    
+    if st.button("🔥 Iniciar Duelo contra a IA"):
+        # We simulate a "Duel" by giving random questions and a fast timer
+        st.session_state["duel_active"] = True
+        st.session_state["duel_qs"] = random.sample(get_all_questions(), 5) if get_all_questions() else []
+        st.session_state["duel_start"] = time.time()
+        st.rerun()
+        
+    if st.session_state.get("duel_active"):
+        st.warning("MODO DUELO ATIVADO. SEM MISERICÓRDIA.")
+        # Similar to Simulados but faster
+        # (Simplified implementation for now)
+        st.info("Responda o mais rápido possível no Arsenal de Questões para registrar recordes!")
 
 # ── Tab 5: Meu Desempenho ─────────────────────────────────────────────────────
 with tab5:
@@ -515,8 +786,243 @@ with tab5:
             st.dataframe(summary[['Materia', 'Questoes Resolvidas', 'Taxa de Acerto (%)']], use_container_width=True, hide_index=True)
 
 
+# ── Tab: Criar Lista Inédita ──────────────────────────────────────────────────
+with tab_ai_list:
+    st.header("🤖 Forjar Missão com IA (Questões Inéditas)")
+    st.markdown("A Inteligência Artificial criará uma lista de questões completamente originais com base no concurso, matéria e nível de dificuldade escolhidos.")
+
+    with st.form("ai_list_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            ai_exam = st.text_input("Concurso Foco (Ex: EsPCEx, ESA, EFOMM)", value="EsPCEx")
+            ai_subj = st.selectbox("Matéria Geral", ["Matemática", "Física", "Química", "História", "Geografia", "Português", "Inglês"])
+        with col2:
+            ai_subtopic = st.text_input("Subtópico Específico (Ex: Geometria Plana, Cinemática)", value="Geometria Plana")
+            ai_diff = st.selectbox("Nível de Dificuldade", ["Facil", "Medio", "Dificil"])
+
+        ai_num_questions = st.number_input("Número de Questões", min_value=1, max_value=15, value=5)
+        
+        st.markdown("---")
+        ai_submit = st.form_submit_button("🔨 Forjar Missão Inédita")
+
+    if ai_submit:
+        if not os.getenv("GEMINI_API_KEY"):
+            st.error("Chave de API do Gemini não configurada! Vá na aba 'Configurações' primeiro.")
+        else:
+            loading_placeholder_ai = st.empty()
+            loading_placeholder_ai.markdown(_battle_html("A MÁQUINA ESTÁ FORJANDO QUESTÕES ORIGINAIS... AGUARDE"), unsafe_allow_html=True)
+            
+            custom_qs = generate_custom_questions(ai_exam, ai_subj, ai_subtopic, ai_diff, ai_num_questions)
+            loading_placeholder_ai.empty()
+
+            if not custom_qs:
+                st.error("Falha ao forjar as missões. Tente novamente mais tarde.")
+            else:
+                st.session_state["active_ai_list"] = custom_qs
+                st.session_state["active_ai_list_exam"] = ai_exam
+                st.session_state["active_ai_list_subj"] = ai_subj
+                st.session_state["active_ai_list_subtopic"] = ai_subtopic
+                st.session_state["active_ai_list_diff"] = ai_diff
+                st.success(f"A Inteligência forjou {len(custom_qs)} questões inéditas! Pronta para o combate.")
+                st.markdown('<audio src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" autoplay></audio>', unsafe_allow_html=True)
+                st.rerun()
+
+    if "active_ai_list" in st.session_state and st.session_state["active_ai_list"]:
+        st.divider()
+        st.subheader("🎯 Responda a Missão Inédita")
+        
+        active_qs = st.session_state["active_ai_list"]
+        with st.form("solve_ai_list_form"):
+            for idx, q in enumerate(active_qs):
+                st.markdown(f"#### Questão {idx + 1}")
+                st.write(q.get('question_text', ''))
+                
+                opts = q.get('options', {})
+                sorted_letters = sorted(opts.keys())
+                display_opts = [f"{k}) {opts[k]}" for k in sorted_letters]
+                
+                st.radio(f"Sua resposta para a questão {idx+1}", display_opts, index=None, key=f"ai_ans_q_{idx}")
+                st.markdown("---")
+            
+            entregar_ai = st.form_submit_button("✅ Entregar e Avaliar Missão")
+        
+        if entregar_ai:
+            acertos_ai = 0
+            # Salvando no banco de dados DEPOIS de responder para garantir que existam IDs
+            for idx, q in enumerate(active_qs):
+                ans_str_ai = st.session_state.get(f"ai_ans_q_{idx}")
+                letter_ai = ans_str_ai.split(")")[0] if ans_str_ai else None
+                correct_ai = (letter_ai == q.get('correct_answer_letter'))
+                
+                q_id = insert_question(
+                    exam_origin=f"Inédito AI - {st.session_state['active_ai_list_exam']}",
+                    year="2026",
+                    subject=st.session_state['active_ai_list_subj'],
+                    difficulty=st.session_state['active_ai_list_diff'],
+                    question_text=q.get('question_text', ''),
+                    options=q.get('options', {}),
+                    correct_answer=q.get('correct_answer_letter', 'A'),
+                    resolution_1=q.get('resolution_1', ''),
+                    resolution_2=q.get('resolution_2', ''),
+                    image_path="",
+                    has_image=False,
+                    subtopic=st.session_state['active_ai_list_subtopic']
+                )
+                
+                if letter_ai:
+                    save_performance(q_id, letter_ai, correct_ai, user_info['id'])
+                    if correct_ai:
+                        acertos_ai += 1
+            
+            st.success(f"Missão Cumprida! Você acertou {acertos_ai} de {len(active_qs)}.")
+            if acertos_ai == len(active_qs):
+                st.balloons()
+            
+            st.session_state["active_ai_list"] = None
+            time.sleep(3)
+            st.rerun()
+
+# ── Tab: Sala de Redação ──────────────────────────────────────────────────────
+with tab_redacao:
+    st.header("✍️ Sala de Redação (Recinto de Avaliação)")
+    
+    with st.expander("📋 Ver Critérios de Avaliação (Padrão EsPCEx/ESA)"):
+        st.markdown("""
+        **1. Compreensão do Tema:** O candidato deve ater-se ao tema proposto.
+        **2. Estrutura Textual:** Introdução, Desenvolvimento e Conclusão.
+        **3. Coesão e Coerência:** Uso de conectivos e lógica de argumentação.
+        **4. Norma Culta:** Pontuação, acentuação e regência.
+        ---
+        *A nota varia de 0 a 100 baseada na média desses pilares.*
+        """)
+
+    st.markdown("Envie seu texto ou a foto da sua folha para análise imediata do Tenente Corretor.")
+    
+    with st.form("redacao_form_v4"):
+        t_red = st.text_input("Tema da Redação", placeholder="Ex: O uso da tecnologia na defesa cibernética nacional")
+        txt_red = st.text_area("Texto da Redação (Copie e Cole ou Digite)", height=300)
+        img_red = st.file_uploader("📷 Foto da Folha de Resposta (Opcional)", type=["png", "jpg", "jpeg"])
+        sub_red = st.form_submit_button("🔨 SOLICITAR PARECER DO COMANDO")
+        
+    if sub_red:
+        if not txt_red.strip() and not img_red:
+            st.warning("É necessário fornecer o texto ou a imagem da redação.")
+        else:
+            with st.spinner("Analisando gramática, coesão e argumentação..."):
+                img_bytes = img_red.getvalue() if img_red else None
+                fb = evaluate_essay(txt_red, t_red, img_bytes)
+                
+                st.markdown("### 📋 Feedack Detalhado")
+                st.markdown(f"""
+                <div style="background: rgba(212, 175, 55, 0.05); border: 1px solid #d4af37; border-radius: 10px; padding: 20px;">
+                    {fb}
+                </div>
+                """, unsafe_allow_html=True)
+                st.toast("Redação avaliada com sucesso!")
+
+# ── Tab: Duelo Tático ─────────────────────────────────────────────────────────
+with tab_duelo:
+    st.header("⚔️ Duelo de Elite (Rapid Fire)")
+    st.markdown("Teste sua velocidade sob pressão. **30 segundos** por questão. **5 rounds**.")
+    
+    if "duel_state" not in st.session_state:
+        st.session_state["duel_state"] = "IDLE" # IDLE, ACTIVE, RESULT
+        st.session_state["duel_score"] = 0
+        st.session_state["duel_current_q"] = 0
+        st.session_state["duel_questions"] = []
+
+    if st.session_state["duel_state"] == "IDLE":
+        st.info("Prepara-se para o combate. A IA selecionará 5 questões aleatórias do banco.")
+        if st.button("🔥 INICIAR COMBATE IMEDIATO"):
+            all_qs_duel = get_all_questions()
+            if len(all_qs_duel) < 5:
+                st.error("É necessário ter pelo menos 5 questões no banco para iniciar um duelo.")
+            else:
+                import random
+                st.session_state["duel_questions"] = random.sample(all_qs_duel, 5)
+                st.session_state["duel_state"] = "ACTIVE"
+                st.session_state["duel_current_q"] = 0
+                st.session_state["duel_score"] = 0
+                st.session_state["duel_start_time"] = time.time()
+                st.rerun()
+
+    elif st.session_state["duel_state"] == "ACTIVE":
+        curr_idx = st.session_state["duel_current_q"]
+        q_duel = st.session_state["duel_questions"][curr_idx]
+        
+        # UI: Progress and Timer
+        cols = st.columns([1, 4, 1])
+        with cols[0]:
+            st.markdown(f"**ROUND {curr_idx + 1}/5**")
+        with cols[1]:
+            st.progress((curr_idx) / 5)
+        with cols[2]:
+            elapsed_duel = time.time() - st.session_state.get("duel_start_time", time.time())
+            remaining_duel = max(0.0, 30.0 - elapsed_duel)
+            color_duel = "green" if remaining_duel > 10 else "red"
+            st.markdown(f"<h3 style='color:{color_duel}; text-align:right; margin:0;'>{int(remaining_duel)}s</h3>", unsafe_allow_html=True)
+
+        if remaining_duel <= 0:
+            st.warning("TEMPO ESGOTADO! PRÓXIMA QUESTÃO.")
+            st.session_state["duel_current_q"] += 1
+            if st.session_state["duel_current_q"] >= 5:
+                st.session_state["duel_state"] = "RESULT"
+            else:
+                st.session_state["duel_start_time"] = time.time()
+            st.rerun()
+
+        st.markdown("---")
+        if q_duel.get('has_image') and q_duel.get('image_path') and os.path.exists(q_duel['image_path']):
+            st.image(q_duel['image_path'], use_container_width=True)
+        st.write(q_duel['question_text'])
+        
+        opts_duel = q_duel.get('options', {})
+        sorted_keys = sorted(opts_duel.keys())
+        
+        # Use columns for options to be faster
+        col_opts = st.columns(len(sorted_keys))
+        for i, k in enumerate(sorted_keys):
+            if col_opts[i].button(f"{k}", key=f"duel_btn_{curr_idx}_{k}", use_container_width=True):
+                if k == q_duel.get('correct_answer_letter'):
+                    st.session_state["duel_score"] += 1
+                    st.toast("ALVO ABATIDO! 🎯")
+                else:
+                    st.toast("DISPARO PERDIDO! ❌")
+                
+                # Next Question
+                st.session_state["duel_current_q"] += 1
+                if st.session_state["duel_current_q"] >= 5:
+                    st.session_state["duel_state"] = "RESULT"
+                else:
+                    st.session_state["duel_start_time"] = time.time()
+                st.rerun()
+
+    elif st.session_state["duel_state"] == "RESULT":
+        st.header("🏁 RELATÓRIO DE COMBATE")
+        score = st.session_state["duel_score"]
+        
+        col_res1, col_res2 = st.columns(2)
+        with col_res1:
+            st.metric("Sua Pontuação", f"{score}/5")
+        with col_res2:
+            st.metric("Oponente (IA)", "4/5") # Fixed for now to feel like a "Duel"
+            
+        if score > 4:
+            st.success("VITÓRIA ESMAGADORA! Você superou a máquina.")
+            st.balloons()
+            award_badge(user_info['id'], "Elite do Elite (Duelista)")
+        elif score == 4:
+            st.info("EMPATE TÁTICO! Ambos demonstraram alta precisão.")
+        else:
+            st.error("DERROTA! A máquina foi mais rápida e precisa desta vez.")
+            st.snow()
+            
+        if st.button("🔄 Voltar ao Quartel"):
+            st.session_state["duel_state"] = "IDLE"
+            st.rerun()
+
 # ── Tab 6: Configuracoes (ADMIN ONLY) ─────────────────────────────────────────
-if user_info['role'] == 'admin':
+if user_info['role'] == 'admin' and tab6 is not None:
     with tab6:
         st.header("Configuracoes")
 
@@ -569,13 +1075,20 @@ if user_info['role'] == 'admin':
 
         st.divider()
 
-        # ── Cache Info ────────────────────────────────────────────────────────────
-        st.subheader("🗄️ Cache de PDFs Processados")
-        st.markdown("PDFs ja processados sao detectados automaticamente para evitar duplicatas.")
-        st.info("O cache e verificado automaticamente ao fazer upload de um PDF na aba 'Adicionar PDF'.")
+        st.divider()
+        
+        # ── SYSTEM RESET ──────────────────────────────────────────────────────────
+        st.subheader("🚨 Missão de Autodestruição (Reset)")
+        st.warning("CUIDADO: Isso apagará todas as questões, usuários e desempenhos permanentemente.")
+        if st.button("🔥 Reiniciar Tudo (Wipe Database)"):
+            from database import reset_db
+            reset_db()
+            st.success("Operação concluída. O Quartel está limpo.")
+            time.sleep(2)
+            st.rerun()
 
 # ── Tab 7: Recrutamento e Controle de Tropa (ADMIN ONLY) ───────────────────
-if user_info['role'] == 'admin':
+if user_info['role'] == 'admin' and tab7 is not None:
     with tab7:
         st.header("👥 Alto Comando (Controle de Pessoal)")
         st.markdown("Gerencie todo o seu efetivo. Acompanhe a experiência, os destaques e desligue membros inativos.")

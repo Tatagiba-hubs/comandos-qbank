@@ -7,11 +7,20 @@ from typing import List, Dict, Any
 
 import psycopg2
 import psycopg2.extras
+import streamlit as st
 from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+def get_db_url():
+    try:
+        return st.secrets["DATABASE_URL"]
+    except FileNotFoundError:
+        return os.getenv("DATABASE_URL")
+    except KeyError:
+        return os.getenv("DATABASE_URL")
+
+DATABASE_URL = get_db_url()
 
 
 def get_conn():
@@ -36,6 +45,7 @@ def init_db():
             resolution_2 TEXT,
             image_path TEXT,
             has_image BOOLEAN DEFAULT FALSE,
+            subtopic TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -79,12 +89,23 @@ def init_db():
         )
     ''')
 
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS badges (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            badge_name TEXT NOT NULL,
+            achieved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, badge_name)
+        )
+    ''')
+
     # Safe migrations — ADD COLUMN IF NOT EXISTS (PostgreSQL nativo)
     migrations = [
         'ALTER TABLE questions ADD COLUMN IF NOT EXISTS resolution_1 TEXT',
         'ALTER TABLE questions ADD COLUMN IF NOT EXISTS resolution_2 TEXT',
         'ALTER TABLE questions ADD COLUMN IF NOT EXISTS image_path TEXT',
         'ALTER TABLE questions ADD COLUMN IF NOT EXISTS has_image BOOLEAN DEFAULT FALSE',
+        'ALTER TABLE questions ADD COLUMN IF NOT EXISTS subtopic TEXT',
         'ALTER TABLE performance ADD COLUMN IF NOT EXISTS user_id INTEGER DEFAULT 1',
     ]
     for m in migrations:
@@ -93,6 +114,21 @@ def init_db():
     conn.commit()
     cur.close()
     conn.close()
+
+
+def reset_db():
+    """Drops all tables and recreates them. USE WITH CAUTION."""
+    conn = get_conn()
+    cur = conn.cursor()
+    
+    tables = ['badges', 'performance', 'options', 'questions', 'users', 'pdf_cache']
+    for table in tables:
+        cur.execute(f'DROP TABLE IF EXISTS {table} CASCADE')
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    init_db()
 
 
 # ── PDF Cache ─────────────────────────────────────────────────────────────────
@@ -133,6 +169,7 @@ def export_to_json(questions: List[Dict[str, Any]]) -> str:
             "exam_origin": q.get("exam_origin"),
             "year": q.get("year"),
             "subject": q.get("subject"),
+            "subtopic": q.get("subtopic", ""),
             "difficulty": q.get("difficulty"),
             "question_text": q.get("question_text"),
             "options": q.get("options", {}),
@@ -148,7 +185,7 @@ def export_to_json(questions: List[Dict[str, Any]]) -> str:
 def export_to_csv(questions: List[Dict[str, Any]]) -> str:
     output = io.StringIO()
     writer = csv.writer(output, quoting=csv.QUOTE_ALL)
-    headers = ["id", "exam_origin", "year", "subject", "difficulty",
+    headers = ["id", "exam_origin", "year", "subject", "subtopic", "difficulty",
                 "question_text", "A", "B", "C", "D", "E",
                 "correct_answer_letter", "resolution_1", "resolution_2"]
     writer.writerow(headers)
@@ -156,7 +193,7 @@ def export_to_csv(questions: List[Dict[str, Any]]) -> str:
         opts = q.get("options", {})
         writer.writerow([
             q.get("id", ""), q.get("exam_origin", ""), q.get("year", ""),
-            q.get("subject", ""), q.get("difficulty", ""), q.get("question_text", ""),
+            q.get("subject", ""), q.get("subtopic", ""), q.get("difficulty", ""), q.get("question_text", ""),
             opts.get("A", ""), opts.get("B", ""), opts.get("C", ""),
             opts.get("D", ""), opts.get("E", ""),
             q.get("correct_answer_letter", ""),
@@ -170,16 +207,27 @@ def export_to_csv(questions: List[Dict[str, Any]]) -> str:
 def insert_question(exam_origin: str, year: str, subject: str, difficulty: str,
                     question_text: str, options: Dict[str, str], correct_answer: str,
                     resolution_1: str = "", resolution_2: str = "",
-                    image_path: str = "", has_image: bool = False) -> int:
+                    image_path: str = "", has_image: bool = False, subtopic: str = "") -> int:
     conn = get_conn()
     cur = conn.cursor()
 
+    # Check for existing question to avoid duplicates (idempotency)
     cur.execute('''
-        INSERT INTO questions (exam_origin, year, subject, difficulty, question_text,
+        SELECT id FROM questions 
+        WHERE question_text = %s AND exam_origin = %s AND year = %s
+    ''', (question_text, exam_origin, year))
+    existing = cur.fetchone()
+    if existing:
+        cur.close()
+        conn.close()
+        return existing["id"]
+
+    cur.execute('''
+        INSERT INTO questions (exam_origin, year, subject, subtopic, difficulty, question_text,
                                resolution_1, resolution_2, image_path, has_image)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING id
-    ''', (exam_origin, year, subject, difficulty, question_text,
+    ''', (exam_origin, year, subject, subtopic, difficulty, question_text,
           resolution_1, resolution_2, image_path, has_image))
 
     question_id = cur.fetchone()["id"]
@@ -266,7 +314,7 @@ def get_performance_stats(user_id: int) -> List[Dict[str, Any]]:
     conn = get_conn()
     cur = conn.cursor()
     cur.execute('''
-        SELECT p.is_correct, q.subject, q.difficulty, p.timestamp
+        SELECT p.is_correct, q.subject, q.difficulty, q.subtopic, p.timestamp
         FROM performance p
         JOIN questions q ON p.question_id = q.id
         WHERE p.user_id = %s
@@ -322,6 +370,37 @@ def get_user_rank(user_id: int, role: str) -> tuple[str, int]:
     else:              rank = "General"
 
     return rank, points
+
+
+def award_badge(user_id: int, badge_name: str) -> bool:
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            INSERT INTO badges (user_id, badge_name)
+            VALUES (%s, %s)
+            ON CONFLICT (user_id, badge_name) DO NOTHING
+            RETURNING id
+        ''', (user_id, badge_name))
+        awarded = cur.fetchone() is not None
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        return False
+    finally:
+        cur.close()
+        conn.close()
+    return awarded
+
+
+def get_user_badges(user_id: int) -> List[Dict[str, Any]]:
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute('SELECT badge_name, achieved_at FROM badges WHERE user_id = %s ORDER BY achieved_at DESC', (user_id,))
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 def get_question_by_id(question_id: int) -> Dict[str, Any] | None:

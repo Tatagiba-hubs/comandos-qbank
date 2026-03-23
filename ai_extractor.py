@@ -34,6 +34,7 @@ question_schema = {
             "exam_origin":           {"type": "string"},
             "year":                  {"type": "string"},
             "subject":               {"type": "string"},
+            "subtopic":              {"type": "string", "description": "Categoria especifica da materia, ex: 'Geometria Plana' se for Matematica."},
             "difficulty":            {"type": "string", "enum": ["Facil", "Medio", "Dificil"]},
             "question_text":         {"type": "string"},
             "has_image": {
@@ -55,7 +56,7 @@ question_schema = {
             },
             "correct_answer_letter": {"type": "string"},
         },
-        "required": ["page_number", "exam_origin", "subject", "difficulty", "question_text", "options", "has_image"]
+        "required": ["page_number", "exam_origin", "subject", "subtopic", "difficulty", "question_text", "options", "has_image"]
     }
 }
 
@@ -146,7 +147,8 @@ def extract_questions_from_pdf(pdf_path: str, progress_callback=None):
             prompt = (
                 f"Voce e um especialista em provas militares brasileiras. "
                 f"Extraia TODAS as questoes das paginas {start_page + 1} a {end_page + 1} deste documento.\n"
-                f"Para cada questao forneca:\n- page_number (exata de 1 a N)\n- origin, year, subject, difficulty\n"
+                f"Para cada questao forneca:\n- page_number (exata de 1 a N)\n- origin, year, subject, subtopic, difficulty\n"
+                f"- AVISO: preencha SEMPRE 'subtopic' com o subtópico específico dentro do subject (ex: Trigonometria, Cinemática).\n"
                 f"- question_text: TRASCREVA TODO O TEXTO DA QUESTAO NA INTEGRA.\n"
                 f"- Se a questao tiver figura indispensavel, marque has_image=true E forneça a image_bbox [ymin, ymax, xmin, xmax] em PORCENTAGEM (0 a 100) exata da figura.\n"
                 f"🚨 ALERTA CRITICO: A bbox DEVE SER UM RECORTE CIRURGICO! Nao inclua logos de cursinhos (como 'Estrategia'), cabecalhos ou rodape do PDF. Nao inclua o texto do enunciado na bbox da imagem, senao vc cortara a questao seguinte!"
@@ -217,6 +219,9 @@ def extract_questions_from_pdf(pdf_path: str, progress_callback=None):
                     # Normalize difficulty
                     raw_diff = q.get("difficulty", "Medio")
                     q["difficulty"] = diff_map.get(raw_diff, raw_diff)
+                
+                # yield the chunk of questions
+                yield parsed
                 all_questions.extend(parsed)
 
         except Exception as e:
@@ -229,7 +234,7 @@ def extract_questions_from_pdf(pdf_path: str, progress_callback=None):
                     pass
 
     doc.close()
-    return all_questions
+    return
 
 
 def generate_resolution(question_text: str, options: dict) -> dict:
@@ -243,13 +248,107 @@ def generate_resolution(question_text: str, options: dict) -> dict:
     )
 
     opts_text = "\n".join(f"{k}) {v}" for k, v in sorted(options.items()))
-    prompt = f"Resolva didaticamente:\nENUNCIADO:\n{question_text}\nALTERNATIVAS:\n{opts_text}"
+    prompt = (f"Você é um professor pardal rigorosíssimo de exatas. "
+              f"Resolva de forma ALGEBRICA, PASSO A PASSO e MATEMATICA. Se for humana/linguagens, focar na técnica interpretativa em passos lógicos.\n"
+              f"ENUNCIADO:\n{question_text}\nALTERNATIVAS:\n{opts_text}\n"
+              f"Instruções:\n"
+              f"- resolution_1: Mostre a prova algébrica/lógica completa, linha por linha, detalhando todas as equações e leis utilizadas.\n"
+              f"- resolution_2: Mostre um bizu ou método alternativo rápido caso exista, senão resuma os macetes da questão.")
 
     response, err = _call_gemini_with_retry(model, prompt, max_retries=3)
     if err:
         return {"resolution_1": f"Erro: {err}", "resolution_2": "Tente novamente mais tarde."}
     return json.loads(response.text)
 
+
+def generate_custom_questions(exam_origin: str, subject: str, subtopic: str, difficulty: str, num_questions: int) -> list:
+    configure_api()
+    model = genai.GenerativeModel(
+        model_name='gemini-2.5-flash',
+        generation_config={
+            "response_mime_type": "application/json",
+            "response_schema": question_schema
+        }
+    )
+
+    prompt = (f"Crie uma lista INÉDITA (autoral) de {num_questions} questões para concursos no estilo '{exam_origin}'.\n"
+              f"Matéria: {subject}\nSubtópico: {subtopic}\nDificuldade: {difficulty}.\n"
+              f"As questões não devem requerer imagens (has_image=false).\n"
+              f"Forneça com muito capricho, criando enredos interessantes operacionais militares se for o caso.")
+
+    response, err = _call_gemini_with_retry(model, prompt, max_retries=3)
+    if err:
+        print(f"[ERRO] Falha ao gerar questoes: {err}")
+        return []
+    
+    try:
+        parsed = json.loads(response.text)
+        if isinstance(parsed, list):
+            for q in parsed:
+                # Normaliza campos
+                q["page_number"] = 1
+                q["has_image"] = False
+                q["image_path"] = ""
+                q["resolution_1"] = ""
+                q["resolution_2"] = ""
+            return parsed
+        return []
+    except Exception as e:
+        print(f"[ERRO] Parse failed: {e}")
+        return []
+
+def analyze_discursive_image(question_text: str, image_bytes: bytes = None) -> str:
+    configure_api()
+    model = genai.GenerativeModel(model_name='gemini-1.5-flash')
+    
+    if image_bytes:
+        prompt = (f"Avalie a resolução manuscrita/enviada da seguinte questão discursiva.\n"
+                  f"QUESTÃO: {question_text}\n"
+                  f"Instruções:\n"
+                  f"1. Se o aluno acertou de forma matemática e coerente, elogie e detalhe por que está correto.\n"
+                  f"2. Se ele errou ou pulou passos, aponte exatamente onde foi a falha no raciocínio (linha a linha) e deduza o que ele tentou fazer.\n"
+                  f"3. Mostre a resolução passo a passo ideal e correta da banca.\n"
+                  f"4. Dê uma nota ou pontuação no padrão militar rigoroso.")
+        
+        image_part = {"mime_type": "image/jpeg", "data": image_bytes}
+        try:
+            response = model.generate_content([prompt, image_part])
+            return response.text
+        except Exception as e:
+            return f"Erro na análise: {str(e)}"
+    else:
+        prompt = (f"Esta é uma questão discursiva e o aluno não enviou foto da resolução.\n"
+                  f"QUESTÃO: {question_text}\n"
+                  f"Por favor, apresente o padrão de resposta (gabarito) detalhado, passo a passo, mostrando toda a dedução lógica e algébrica esperada por uma banca militar rigorosa.")
+        try:
+            response = model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            return f"Erro na formatação do padrão de resposta: {str(e)}"
+
+def evaluate_essay(essay_text: str, theme: str = "Tema livre", image_bytes: bytes = None) -> str:
+    configure_api()
+    model = genai.GenerativeModel(model_name='gemini-1.5-pro')
+    
+    prompt = (f"Você é um corretor de redação de um concurso militar de alto nível (EsPCEx/ESA).\n"
+              f"TEMA: {theme}\n"
+              f"Instruções:\n"
+              f"1. Analise o texto quanto à Gramática (Norma Culta), Coesão/Coerência, Argumentação e Proposta de Intervenção.\n"
+              f"2. Se houver imagem, considere a caligrafia e a estrutura visual da folha.\n"
+              f"3. Dê uma nota de 0 a 100.\n"
+              f"4. Forneça um feedback detalhado dividindo por tópicos, apontando erros específicos e como melhorar.")
+    
+    parts = [prompt]
+    if essay_text:
+        parts.append(essay_text)
+    if image_bytes:
+        parts.append({"mime_type": "image/jpeg", "data": image_bytes})
+        
+    try:
+        response = model.generate_content(parts)
+        return response.text
+    except Exception as e:
+        return f"Erro na correção da redação: {str(e)}"
 
 if __name__ == "__main__":
     pass
