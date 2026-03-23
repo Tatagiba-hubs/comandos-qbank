@@ -112,7 +112,7 @@ def extract_questions_from_pdf(pdf_path: str, progress_callback=None):
 
     doc = fitz.open(pdf_path)
     total_pages = len(doc)
-    CHUNK_SIZE = 15
+    CHUNK_SIZE = 10
     all_questions = []
 
     model = genai.GenerativeModel(
@@ -122,6 +122,17 @@ def extract_questions_from_pdf(pdf_path: str, progress_callback=None):
             "response_schema": question_schema
         }
     )
+
+    def _clean_json(text):
+        """Removes Markdown code blocks and extra whitespace."""
+        text = text.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.startswith("```"):
+            text = text[3:]
+        if text.endswith("```"):
+            text = text[:-3]
+        return text.strip()
 
     for start_page in range(0, total_pages, CHUNK_SIZE):
         end_page = min(start_page + CHUNK_SIZE - 1, total_pages - 1)
@@ -137,9 +148,9 @@ def extract_questions_from_pdf(pdf_path: str, progress_callback=None):
         chunk_doc.save(chunk_path)
         chunk_doc.close()
 
-        # Add a small mandatory delay between chunks to stay under RPM (reduzido)
+        # Add a mandatory delay between chunks to stay under RPM
         if start_page > 0:
-            time.sleep(1)
+            time.sleep(2)
 
         try:
             pdf_file = genai.upload_file(path=chunk_path)
@@ -147,11 +158,11 @@ def extract_questions_from_pdf(pdf_path: str, progress_callback=None):
             prompt = (
                 f"Voce e um especialista em provas militares brasileiras. "
                 f"Extraia TODAS as questoes das paginas {start_page + 1} a {end_page + 1} deste documento.\n"
-                f"Para cada questao forneca:\n- page_number (exata de 1 a N)\n- origin, year, subject, subtopic, difficulty\n"
-                f"- AVISO: preencha SEMPRE 'subtopic' com o subtópico específico dentro do subject (ex: Trigonometria, Cinemática).\n"
+                f"Para cada questao forneca:\n- page_number (exata de 1 a N)\n- exam_origin, year, subject, subtopic, difficulty\n"
+                f"- subtopic: subtópico específico dentro do subject (ex: Trigonometria, Cinemática).\n"
                 f"- question_text: TRASCREVA TODO O TEXTO DA QUESTAO NA INTEGRA.\n"
                 f"- Se a questao tiver figura indispensavel, marque has_image=true E forneça a image_bbox [ymin, ymax, xmin, xmax] em PORCENTAGEM (0 a 100) exata da figura.\n"
-                f"🚨 ALERTA CRITICO: A bbox DEVE SER UM RECORTE CIRURGICO! Nao inclua logos de cursinhos (como 'Estrategia'), cabecalhos ou rodape do PDF. Nao inclua o texto do enunciado na bbox da imagem, senao vc cortara a questao seguinte!"
+                f"🚨 ALERTA CRITICO: A bbox DEVE SER UM RECORTE CIRURGICO! Nao inclua logos de cursinhos (como 'Estrategia'), cabecalhos ou rodape do PDF. Nao inclua o texto do enunciado na bbox da imagem."
             )
 
             response, err = _call_gemini_with_retry(model, [prompt, pdf_file])
@@ -161,7 +172,8 @@ def extract_questions_from_pdf(pdf_path: str, progress_callback=None):
                 print(f"[ERRO] Chunk pag {start_page + 1}-{end_page + 1}: {err}")
                 continue
 
-            parsed = json.loads(response.text)
+            cleaned_text = _clean_json(response.text)
+            parsed = json.loads(cleaned_text)
 
             # Normalize difficulty to match DB expectations
             diff_map = {"Facil": "Facil", "Medio": "Medio", "Dificil": "Dificil",

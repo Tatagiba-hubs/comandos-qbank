@@ -172,19 +172,76 @@ st.markdown(f"""
     /* Global Theme & Premium Fonts */
     @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700;900&family=JetBrains+Mono&display=swap');
     
+    /* ── ESTRATÉGIA STYLE SIDEBAR (HOVER-EXPAND) ── */
+    [data-testid="stSidebar"] {{
+        background-color: #0d110d !important; /* Mantendo um verde tático bem escuro */
+        border-right: 1px solid rgba(255,255,255,0.05) !important;
+        width: 82px !important;
+        min-width: 82px !important;
+        transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        overflow-x: hidden !important;
+        z-index: 999999;
+    }}
+    
+    [data-testid="stSidebar"]:hover {{
+        width: 280px !important;
+        min-width: 280px !important;
+    }}
+    
+    [data-testid="stSidebarCollapseButton"] {{ display: none !important; }}
+    button[kind="header"] {{ display: none !important; }}
+
+    /* Custom Radio Styling (Estratégia Look) */
+    [data-testid="stSidebar"] div[role="radiogroup"] {{
+        gap: 8px !important;
+        padding-top: 20px !important;
+    }}
+    
+    [data-testid="stSidebar"] div[role="radiogroup"] > label {{
+        padding: 12px 14px !important;
+        border-radius: 12px !important;
+        margin: 0 10px !important;
+        background-color: transparent !important;
+        transition: all 0.2s ease !important;
+        color: #888888 !important;
+        cursor: pointer !important;
+        border: none !important;
+        box-shadow: none !important;
+    }}
+
+    /* Hide the radio circle */
+    [data-testid="stSidebar"] div[role="radiogroup"] > label div:first-child {{
+        display: none !important;
+    }}
+
+    [data-testid="stSidebar"] div[role="radiogroup"] > label:hover {{
+        background-color: rgba(255,255,255,0.05) !important;
+    }}
+
+    /* Selected Item Highlight (Solid Green) */
+    [data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) {{
+        background-color: #3e735d !important; /* Verde Estratégia */
+        color: #ffffff !important;
+    }}
+    
+    [data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) p {{
+        color: #ffffff !important;
+        font-weight: 600 !important;
+    }}
+
+    [data-testid="stSidebar"] div[role="radiogroup"] > label p {{
+        font-size: 15px !important;
+        margin: 0 !important;
+        white-space: nowrap !important;
+    }}
+
+    /* Rest of Global Styling... */
     .stApp {{
         background: radial-gradient(circle at 50% 0%, #101810, #000000);
         color: #e0e0e0;
         font-family: 'Outfit', sans-serif;
     }}
 
-    /* Vertical Navigation Simulation (Sidebar) */
-    [data-testid="stSidebar"] {{
-        background-color: #050505 !important;
-        border-right: 2px solid {accent_green}44 !important;
-        width: 300px !important;
-    }}
-    
     /* Sidebar Skull Header */
     .sidebar-header {{
         text-align: center;
@@ -398,6 +455,7 @@ if user_info['role'] == 'admin':
                                     exam = q.get('exam_origin', 'Desconhecido')
                                     year = q.get('year', '')
                                     subj = q.get('subject', 'Geral')
+                                    subtopic = q.get('subtopic', '')
                                     diff = q.get('difficulty', 'Medio')
                                     text = q.get('question_text', '')
                                     opts = q.get('options', {})
@@ -407,7 +465,10 @@ if user_info['role'] == 'admin':
                                     img_path = q.get('image_path', '')
                                     has_img = bool(q.get('has_image', False))
 
-                                    insert_question(exam, year, subj, diff, text, opts, ans, res1, res2, img_path, has_img)
+                                    # Debug print for server logs
+                                    print(f"[DEBUG] Saving question: {exam} | {subj} | {subtopic}")
+                                    
+                                    insert_question(exam, year, subj, diff, text, opts, ans, res1, res2, img_path, has_img, subtopic)
                                     total_extracted += 1
                                 
                                 st.toast(f"📥 {len(questions_chunk)} questões salvas no Arsenal!")
