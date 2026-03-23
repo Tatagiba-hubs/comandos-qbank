@@ -174,18 +174,18 @@ st.markdown(f"""
     
     /* ── ESTRATÉGIA STYLE SIDEBAR (HOVER-EXPAND) ── */
     [data-testid="stSidebar"] {{
-        background-color: #0d110d !important; /* Mantendo um verde tático bem escuro */
-        border-right: 1px solid rgba(255,255,255,0.05) !important;
-        width: 82px !important;
-        min-width: 82px !important;
+        background-color: #0b0f0b !important; 
+        border-right: 1px solid rgba(255,255,255,0.08) !important;
+        width: 85px !important;
+        min-width: 85px !important;
         transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
         overflow-x: hidden !important;
         z-index: 999999;
     }}
     
     [data-testid="stSidebar"]:hover {{
-        width: 280px !important;
-        min-width: 280px !important;
+        width: 310px !important;
+        min-width: 310px !important;
     }}
     
     [data-testid="stSidebarCollapseButton"] {{ display: none !important; }}
@@ -195,47 +195,66 @@ st.markdown(f"""
     [data-testid="stSidebar"] div[role="radiogroup"] {{
         gap: 8px !important;
         padding-top: 20px !important;
+        display: flex !important;
+        flex-direction: column !important;
     }}
     
     [data-testid="stSidebar"] div[role="radiogroup"] > label {{
-        padding: 12px 14px !important;
-        border-radius: 12px !important;
+        padding: 12px 20px !important;
+        border-radius: 14px !important;
         margin: 0 10px !important;
         background-color: transparent !important;
         transition: all 0.2s ease !important;
-        color: #888888 !important;
+        color: #999999 !important;
         cursor: pointer !important;
-        border: none !important;
-        box-shadow: none !important;
+        width: calc(100% - 20px) !important;
+        min-height: 50px !important;
+        display: flex !important;
+        align-items: center !important;
     }}
 
-    /* Hide the radio circle */
-    [data-testid="stSidebar"] div[role="radiogroup"] > label div:first-child {{
+    /* Hiding ONLY the radio circle/dot safely */
+    [data-testid="stSidebar"] div[role="radiogroup"] label div:first-child {{
+        min-width: 0 !important;
+        width: 0 !important;
+        height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        visibility: hidden !important;
         display: none !important;
+    }}
+
+    [data-testid="stSidebar"] div[role="radiogroup"] label > div:nth-child(2) {{
+        width: 100% !important;
     }}
 
     [data-testid="stSidebar"] div[role="radiogroup"] > label:hover {{
         background-color: rgba(255,255,255,0.05) !important;
     }}
 
-    /* Selected Item Highlight (Solid Green) */
+    /* Selected Item Highlight */
     [data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) {{
-        background-color: #3e735d !important; /* Verde Estratégia */
+        background-color: #3e735d !important;
         color: #ffffff !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
     }}
     
     [data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) p {{
         color: #ffffff !important;
-        font-weight: 600 !important;
+        font-weight: 700 !important;
     }}
 
     [data-testid="stSidebar"] div[role="radiogroup"] > label p {{
-        font-size: 15px !important;
+        font-size: 16px !important;
         margin: 0 !important;
         white-space: nowrap !important;
+        color: inherit !important;
+        opacity: 1 !important;
+        display: block !important;
+        visibility: visible !important;
     }}
 
-    /* Rest of Global Styling... */
+    /* Estilização Global Resíduo */
     .stApp {{
         background: radial-gradient(circle at 50% 0%, #101810, #000000);
         color: #e0e0e0;
