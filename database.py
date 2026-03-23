@@ -257,33 +257,40 @@ def get_all_questions() -> List[Dict[str, Any]]:
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute('SELECT * FROM questions ORDER BY created_at DESC')
+    # Use a single query to grab everything to avoid N+1 query lag
+    cur.execute('''
+        SELECT q.*, 
+               o.option_letter, o.option_text,
+               c.option_letter AS correct_letter
+        FROM questions q
+        LEFT JOIN options o ON q.id = o.question_id
+        LEFT JOIN options c ON q.correct_answer_id = c.id
+        ORDER BY q.created_at DESC, q.id, o.option_letter
+    ''')
     rows = cur.fetchall()
-
-    questions = []
-    for row in rows:
-        q_dict: Dict[str, Any] = dict(row)
-
-        cur.execute(
-            'SELECT option_letter, option_text FROM options WHERE question_id = %s ORDER BY option_letter',
-            (row['id'],))
-        opts = cur.fetchall()
-        q_dict['options'] = {opt['option_letter']: opt['option_text'] for opt in opts}
-
-        correct_letter = None
-        if row['correct_answer_id']:
-            cur.execute('SELECT option_letter FROM options WHERE id = %s',
-                        (row['correct_answer_id'],))
-            res = cur.fetchone()
-            if res:
-                correct_letter = res['option_letter']
-
-        q_dict['correct_answer_letter'] = correct_letter
-        questions.append(q_dict)
 
     cur.close()
     conn.close()
-    return questions
+
+    questions_dict = {}
+    for row in rows:
+        q_id = row['id']
+        if q_id not in questions_dict:
+            q_dict = dict(row)
+            # Remove joint fields from base dictionary
+            q_dict.pop('option_letter', None)
+            q_dict.pop('option_text', None)
+            q_dict.pop('correct_letter', None)
+            q_dict['options'] = {}
+            q_dict['correct_answer_letter'] = row['correct_letter']
+            questions_dict[q_id] = q_dict
+        
+        # Add the option if present
+        if row.get('option_letter'):
+            questions_dict[q_id]['options'][row['option_letter']] = row.get('option_text', '')
+
+    # Return values in the order of insertion (based on created_at DESC)
+    return list(questions_dict.values())
 
 
 def update_resolution(question_id: int, resolution_1: str, resolution_2: str):

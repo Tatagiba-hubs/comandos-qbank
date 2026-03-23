@@ -41,9 +41,15 @@ def toggle_theme():
 
 # Initialize DB
 from database import get_user_rank
-init_db()
-import auth
-auth.init_default_admin()
+try:
+    init_db()
+    import auth
+    auth.init_default_admin()
+except Exception as e:
+    st.error(f"Erro Crítico no Banco de Dados: As credenciais de acesso ou a conexão com o banco não estão funcionando.")
+    st.error(f"Detalhe Técnico: `{str(e)}`")
+    st.info("Verifique se as variáveis de ambiente em `st.secrets` ou `.env` estão corretas e se o servidor aceita a conexão. O aplicativo foi pausado para evitar falhas graves.")
+    st.stop()
 
 if "user" not in st.session_state:
     st.session_state["user"] = None
@@ -337,19 +343,17 @@ with st.sidebar:
 # We use tactical icons and names as requested for the Black & Green theme
 common_labels = ["🗡️ Banco", "📄 Missões", "💻 Campo Treino", "🤖 Lista IA", "✍️ Redação", "⚔️ Duelo", "🏆 Elite"]
 if user_info['role'] == 'admin':
-    # Infiltração is for PDF Upload (Infiltration into enemy docs)
-    tabs_obj = st.tabs(["📤 Infiltração"] + common_labels + ["⚙️ Config", "👥 Tropa"])
-    tab1, tab2, tab3, tab4, tab_ai_list, tab_redacao, tab_duelo, tab5, tab6, tab7 = tabs_obj
+    all_tabs = ["📤 Infiltração"] + common_labels + ["⚙️ Config", "👥 Tropa"]
 else:
-    tabs_obj = st.tabs(common_labels)
-    tab2, tab3, tab4, tab_ai_list, tab_redacao, tab_duelo, tab5 = tabs_obj
-    tab1 = None
-    tab6 = None
-    tab7 = None
+    all_tabs = common_labels
+
+with st.sidebar:
+    st.markdown("---")
+    selected_tab = st.radio("NAVEGAÇÃO", all_tabs, label_visibility="collapsed")
 
 # ── Tab 1: Upload PDF (ADMIN ONLY) ──────────────────────────────────────────────
 if user_info['role'] == 'admin':
-    with tab1:
+    if selected_tab == '📤 Infiltração':
         st.header("Processar Prova em PDF via Inteligência Artificial")
         uploaded_file = st.file_uploader("Envie a prova em PDF", type="pdf")
 
@@ -434,7 +438,7 @@ if user_info['role'] == 'admin':
                                     pass
 
 # ── Tab 2: Banco de Questoes ──────────────────────────────────────────────────
-with tab2:
+if selected_tab == '🗡️ Banco':
     st.header("Seu Banco de Questoes")
     all_questions: List[Dict[str, Any]] = get_all_questions()
     if not all_questions:
@@ -507,7 +511,7 @@ with tab2:
                                     st.error(f"Erro ao gerar resolucao: {e}")
 
 # ── Tab 3: Gerar Simulado ─────────────────────────────────────────────────────
-with tab3:
+if selected_tab == '📄 Missões':
     st.header("Gerar Simulado em PDF")
     st.markdown("Crie um PDF personalizado com as questoes do banco de dados. Um logo exclusivo será embutido no arquivo!")
 
@@ -563,7 +567,7 @@ with tab3:
         st.info("Nenhuma questao no banco. Faca o upload de provas primeiro.")
 
 # ── Tab 4: Campo de Treino ────────────────────────────────────────────────────
-with tab4:
+if selected_tab == '💻 Campo Treino':
     st.header("💻 Campo de Treino")
     st.markdown("Treine direto no aplicativo contra a máquina e guarde seu desempenho no banco de dados!")
     
@@ -748,7 +752,7 @@ with tab4:
                     st.info(result)
 
 # ── Tab: Sala de Redação ──────────────────────────────────────────────────────
-with tab_redacao:
+if selected_tab == '✍️ Redação':
     st.header("✍️ Sala de Redação")
     st.markdown("Submeta sua redação para correção imediata pela IA, baseada em critérios oficiais de concursos militares.")
     
@@ -772,7 +776,7 @@ with tab_redacao:
                 st.info(feedback)
 
 # ── Tab: Duelo Tático ─────────────────────────────────────────────────────────
-with tab_duelo:
+if selected_tab == '⚔️ Duelo':
     st.header("⚔️ Duelo Tático (Rapid Fire)")
     st.markdown("Teste seus reflexos e precisão. Você tem apenas **30 segundos** por questão!")
     
@@ -790,7 +794,7 @@ with tab_duelo:
         st.info("Responda o mais rápido possível no Arsenal de Questões para registrar recordes!")
 
 # ── Tab 5: Meu Desempenho ─────────────────────────────────────────────────────
-with tab5:
+if selected_tab == '🏆 Elite':
     st.header("📊 Painel de Desempenho (Ficha Militar)")
     st.markdown("Acompanhe sua evolução e identifique seus pontos cegos no território.")
     
@@ -822,7 +826,7 @@ with tab5:
 
 
 # ── Tab: Criar Lista Inédita ──────────────────────────────────────────────────
-with tab_ai_list:
+if selected_tab == '🤖 Lista IA':
     st.header("🤖 Forjar Missão com IA (Questões Inéditas)")
     st.markdown("A Inteligência Artificial criará uma lista de questões completamente originais com base no concurso, matéria e nível de dificuldade escolhidos.")
 
@@ -918,7 +922,7 @@ with tab_ai_list:
             st.rerun()
 
 # ── Tab: Sala de Redação ──────────────────────────────────────────────────────
-with tab_redacao:
+if selected_tab == '✍️ Redação':
     st.header("✍️ Sala de Redação (Recinto de Avaliação)")
     
     with st.expander("📋 Ver Critérios de Avaliação (Padrão EsPCEx/ESA)"):
@@ -956,7 +960,7 @@ with tab_redacao:
                 st.toast("Redação avaliada com sucesso!")
 
 # ── Tab: Duelo Tático ─────────────────────────────────────────────────────────
-with tab_duelo:
+if selected_tab == '⚔️ Duelo':
     st.header("⚔️ Duelo de Elite (Rapid Fire)")
     st.markdown("Teste sua velocidade sob pressão. **30 segundos** por questão. **5 rounds**.")
     
@@ -1057,8 +1061,8 @@ with tab_duelo:
             st.rerun()
 
 # ── Tab 6: Configuracoes (ADMIN ONLY) ─────────────────────────────────────────
-if user_info['role'] == 'admin' and tab6 is not None:
-    with tab6:
+if user_info['role'] == 'admin':
+    if selected_tab == '⚙️ Config':
         st.header("Configuracoes")
 
         # ── API Key ───────────────────────────────────────────────────────────────
@@ -1123,8 +1127,8 @@ if user_info['role'] == 'admin' and tab6 is not None:
             st.rerun()
 
 # ── Tab 7: Recrutamento e Controle de Tropa (ADMIN ONLY) ───────────────────
-if user_info['role'] == 'admin' and tab7 is not None:
-    with tab7:
+if user_info['role'] == 'admin':
+    if selected_tab == '👥 Tropa':
         st.header("👥 Alto Comando (Controle de Pessoal)")
         st.markdown("Gerencie todo o seu efetivo. Acompanhe a experiência, os destaques e desligue membros inativos.")
         

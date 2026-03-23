@@ -116,7 +116,7 @@ def extract_questions_from_pdf(pdf_path: str, progress_callback=None):
     all_questions = []
 
     model = genai.GenerativeModel(
-        model_name='gemini-2.5-flash',
+        model_name='gemini-2.0-flash-exp',
         generation_config={
             "response_mime_type": "application/json",
             "response_schema": question_schema
@@ -240,7 +240,7 @@ def extract_questions_from_pdf(pdf_path: str, progress_callback=None):
 def generate_resolution(question_text: str, options: dict) -> dict:
     configure_api()
     model = genai.GenerativeModel(
-        model_name='gemini-2.5-flash',
+        model_name='gemini-2.0-flash-exp',
         generation_config={
             "response_mime_type": "application/json",
             "response_schema": resolution_schema
@@ -264,7 +264,7 @@ def generate_resolution(question_text: str, options: dict) -> dict:
 def generate_custom_questions(exam_origin: str, subject: str, subtopic: str, difficulty: str, num_questions: int) -> list:
     configure_api()
     model = genai.GenerativeModel(
-        model_name='gemini-2.5-flash',
+        model_name='gemini-2.0-flash-exp',
         generation_config={
             "response_mime_type": "application/json",
             "response_schema": question_schema
