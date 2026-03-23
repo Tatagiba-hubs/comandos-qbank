@@ -76,14 +76,22 @@ def _battle_html(txt):
         + '<div class="smk s3"></div><div class="smk s4"></div>'
         + '<div class="bt">' + txt + '</div></div>')
 
-# ── Hero Banner ────────────────────────────────────────────────────────────────
+# ── Hero Banner & Signature ────────────────────────────────────────────────────
+_skull_path = os.path.join(os.path.dirname(__file__), "skull_logo.png")
+if os.path.exists(_skull_path):
+    with open(_skull_path, "rb") as _f:
+        _skull_b64 = base64.b64encode(_f.read()).decode()
+    _skull_img = f"data:image/png;base64,{_skull_b64}"
+else:
+    _skull_img = ""
+
 _banner_path = os.path.join(os.path.dirname(__file__), "hero_banner.png")
 if os.path.exists(_banner_path):
     with open(_banner_path, "rb") as _f:
         _b64 = base64.b64encode(_f.read()).decode()
     _bg_css = f"url('data:image/png;base64,{_b64}')"
 else:
-    _bg_css = "linear-gradient(135deg, #1a2a1a 0%, #0d1a0d 100%)"
+    _bg_css = "linear-gradient(135deg, #050a05 0%, #000000 100%)"
 
 h_col1, h_col2 = st.columns([0.9, 0.1])
 with h_col2:
@@ -95,16 +103,18 @@ if st.session_state["theme"] == "light":
     gradient = "rgba(255,255,255,0.7) 0%, rgba(240,245,235,0.9) 100%"
     title_col = "#2c4a1b"
     sub_col = "#3b5c2a"
+    accent_green = "#4b5320"
 else:
-    gradient = "rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.75) 100%"
-    title_col = "#FFD600"
-    sub_col = "#d4e8d0"
+    gradient = "rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.85) 100%"
+    title_col = "#00FF41" # Matrix Green
+    sub_col = "#888"
+    accent_green = "#00FF41"
 
 st.markdown(f"""
 <style>
 .hero-banner {{
     width: 100%;
-    min-height: 260px;
+    min-height: 280px;
     background: linear-gradient(to bottom, {gradient}), {_bg_css};
     background-size: cover;
     background-position: center;
@@ -116,126 +126,142 @@ st.markdown(f"""
     padding: 40px 20px;
     margin-bottom: 24px;
     text-align: center;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+    border: 1px solid rgba(0, 255, 65, 0.1);
+}}
+.skull-signature {{
+    width: 100px;
+    margin-bottom: 20px;
+    filter: drop-shadow(0 0 15px rgba(255,255,255,0.4));
 }}
 .hero-title {{
-    font-size: 2.8rem;
+    font-size: 3.2rem;
     font-weight: 900;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.15em;
     color: {title_col} !important;
-    text-shadow: 0 2px 12px rgba(0,0,0,0.8);
+    text-shadow: 0 0 20px rgba(0, 255, 65, 0.4);
     margin: 0;
-    font-family: 'Georgia', serif;
+    font-family: 'Outfit', sans-serif;
 }}
 .hero-sub {{
-    font-size: 1.05rem;
+    font-size: 1.1rem;
     color: {sub_col} !important;
-    margin-top: 10px;
-    letter-spacing: 0.04em;
+    margin-top: 15px;
+    letter-spacing: 0.05em;
     text-shadow: 0 1px 6px rgba(0,0,0,0.9);
+    text-transform: uppercase;
+    font-weight: 300;
 }}
 </style>
 <div class="hero-banner">
-  <div class="hero-title">🗡️ &nbsp; COMANDOS QBANK</div>
-  <div class="hero-sub">O sistema definitivo de inteligência para missões e provas operacionais</div>
+  <img src="{_skull_img}" class="skull-signature">
+  <div class="hero-title">COMANDOS QBANK</div>
+  <div class="hero-sub">Elite de Inteligência em Missões Operacionais</div>
 </div>
 """, unsafe_allow_html=True)
 
-# ── UI MAKEOVER: PREMIUM MILITARY THEME (VIP) ──────────────────────────────────
-st.markdown("""
+# ── UI MAKEOVER: PREMIUM TACTICAL BLACK & GREEN ───────────────────────────────
+st.markdown(f"""
 <style>
     /* Global Theme & Premium Fonts */
     @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700;900&family=JetBrains+Mono&display=swap');
     
-    .stApp {
-        background: radial-gradient(circle at top right, #11141a, #07090c);
-        color: #f0f0f0;
-    }
+    .stApp {{
+        background: radial-gradient(circle at 50% 0%, #101810, #000000);
+        color: #e0e0e0;
+        font-family: 'Outfit', sans-serif;
+    }}
+
+    /* Vertical Navigation Simulation (Sidebar) */
+    [data-testid="stSidebar"] {{
+        background-color: #050505 !important;
+        border-right: 2px solid {accent_green}44 !important;
+        width: 300px !important;
+    }}
+    
+    /* Sidebar Skull Header */
+    .sidebar-header {{
+        text-align: center;
+        padding: 20px 0;
+    }}
+    .sidebar-skull {{
+        width: 60px;
+        filter: drop-shadow(0 0 10px {accent_green}66);
+    }}
 
     /* Glassmorphism for Containers */
     [data-testid="stVerticalBlock"] > div:has(div.stExpander), 
-    [data-testid="stForm"] {
-        background: rgba(255, 255, 255, 0.03);
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(75, 83, 32, 0.3);
+    [data-testid="stForm"] {{
+        background: rgba(10, 20, 10, 0.4);
+        backdrop-filter: blur(8px);
+        border: 1px solid {accent_green}33;
         border-radius: 12px;
-        padding: 20px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-    }
+        padding: 25px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+    }}
     
-    /* Headers with Gold Accents */
-    h1, h2, h3 {
-        color: #d4af37 !important;
+    /* Headers with Tactical Green */
+    h1, h2, h3 {{
+        color: {accent_green} !important;
         font-family: 'Outfit', sans-serif !important;
         text-transform: uppercase;
-        letter-spacing: 3px;
+        letter-spacing: 2px;
         font-weight: 900 !important;
-        text-shadow: 0 0 10px rgba(212, 175, 55, 0.2);
-        border-left: 5px solid #4b5320;
+        text-shadow: 0 0 15px {accent_green}33;
+        border-left: 4px solid {accent_green};
         padding-left: 15px !important;
-        background: linear-gradient(to right, rgba(75, 83, 32, 0.1), transparent);
-    }
+        margin-top: 30px !important;
+    }}
     
-    /* Tactical Buttons */
-    .stButton>button {
-        background: linear-gradient(135deg, #2e3317 0%, #4b5320 100%) !important;
-        color: #d4af37 !important;
-        border: 1px solid #d4af37 !important;
-        border-radius: 6px !important;
-        font-weight: 700 !important;
-        text-transform: uppercase !important;
-        letter-spacing: 1px;
-        height: 48px;
-        box-shadow: inset 0 0 5px rgba(212,175,55,0.1);
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-    }
-    .stButton>button:hover {
-        background: #d4af37 !important;
-        color: #07090c !important;
-        box-shadow: 0 0 20px rgba(212, 175, 55, 0.5);
-        transform: translateY(-2px);
-    }
-    
-    /* Premium Tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 20px;
-        padding: 10px;
-        background: rgba(0,0,0,0.3);
-        border-radius: 15px;
-        border: 1px solid #2e3317;
-    }
-    .stTabs [data-baseweb="tab"] {
-        height: 60px;
-        background-color: transparent !important;
-        border: none !important;
-        color: #888 !important;
-        font-size: 1.1rem !important;
-        font-weight: 400 !important;
-    }
-    .stTabs [aria-selected="true"] {
-        color: #d4af37 !important;
+    /* Tactical Buttons (Green Theme) */
+    .stButton>button {{
+        background: linear-gradient(135deg, #0a1a0a 0%, #1a331a 100%) !important;
+        color: {accent_green} !important;
+        border: 1px solid {accent_green} !important;
+        border-radius: 4px !important;
         font-weight: 900 !important;
-        border-bottom: 3px solid #d4af37 !important;
-        text-shadow: 0 0 8px rgba(212,175,55,0.4);
-    }
+        text-transform: uppercase !important;
+        letter-spacing: 2px;
+        height: 52px;
+        transition: all 0.2s ease-in-out !important;
+    }}
+    .stButton>button:hover {{
+        background: {accent_green} !important;
+        color: #000 !important;
+        box-shadow: 0 0 25px {accent_green}88;
+        transform: scale(1.02);
+    }}
+    
+    /* Custom Tabs Styling */
+    .stTabs [data-baseweb="tab-list"] {{
+        gap: 15px;
+        padding: 12px;
+        background: rgba(0,0,0,0.5);
+        border-radius: 12px;
+        border: 1px solid {accent_green}22;
+    }}
+    .stTabs [data-baseweb="tab"] {{
+        background-color: transparent !important;
+        border: 1px solid transparent !important;
+        color: #666 !important;
+        padding: 10px 20px !important;
+        font-weight: 700 !important;
+        border-radius: 6px !important;
+    }}
+    .stTabs [aria-selected="true"] {{
+        color: {accent_green} !important;
+        background: {accent_green}15 !important;
+        border: 1px solid {accent_green}44 !important;
+        text-shadow: 0 0 10px {accent_green}33;
+    }}
 
-    /* Sidebar Dashboard Look */
-    section[data-testid="stSidebar"] {
-        background-color: #0c0e12;
-        border-right: 1px solid #d4af3755;
-    }
-    section[data-testid="stSidebar"] .stMarkdown h2 {
-        border-left: none;
-        text-align: center;
-        margin-bottom: 20px;
-    }
-
-    /* Cards Simulation */
-    .css-1r6p8d1 { 
-        background-color: rgba(30,30,30,0.5); 
-        border-radius: 10px;
-        padding: 15px;
-    }
+    /* Inputs & Selects */
+    .stTextInput>div>div>input, .stTextArea>div>div>textarea {{
+        background-color: #0c0f0c !important;
+        color: #fff !important;
+        border: 1px solid {accent_green}33 !important;
+    }}
+    
 </style>
 """, unsafe_allow_html=True)
 
@@ -282,7 +308,14 @@ user_info = st.session_state["user"]
 rank, pts = get_user_rank(user_info['id'], user_info['role'])
 
 with st.sidebar:
-    st.markdown(f"## {rank}")
+    st.markdown(f"""
+    <div class="sidebar-header">
+        <img src="{_skull_img}" class="sidebar-skull">
+        <div style="color:{accent_green}; font-weight:900; letter-spacing:2px; margin-top:10px;">COMANDOS QBANK</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown(f"### 🎖️ {rank}")
     st.markdown(f"**NOME:** {user_info['username'].upper()}")
     if user_info['role'] != 'admin':
         st.markdown(f"**XP COMBATE:** {pts} pts")
@@ -296,13 +329,15 @@ with st.sidebar:
         st.markdown("👑 **COMANDO SUPREMO**")
         
     st.divider()
-    if st.button("Sair do Quartel / Logout", use_container_width=True):
+    if st.button("🚪 Sair do Quartel / Logout", use_container_width=True):
         st.session_state["user"] = None
         st.rerun()
 
-# ── LOGIC FOR TABS (New Global Order) ─────────────────────────────────────────
-common_labels = ["🔍 Arsenal", "📄 Missões", "💻 Campo Treino", "🤖 Lista IA", "✍️ Redação", "⚔️ Duelo", "🎖️ Ficha"]
+# ── LOGIC FOR TABS (Premium Tactical Navigation) ──────────────────────────────
+# We use tactical icons and names as requested for the Black & Green theme
+common_labels = ["🗡️ Banco", "📄 Missões", "💻 Campo Treino", "🤖 Lista IA", "✍️ Redação", "⚔️ Duelo", "🏆 Elite"]
 if user_info['role'] == 'admin':
+    # Infiltração is for PDF Upload (Infiltration into enemy docs)
     tabs_obj = st.tabs(["📤 Infiltração"] + common_labels + ["⚙️ Config", "👥 Tropa"])
     tab1, tab2, tab3, tab4, tab_ai_list, tab_redacao, tab_duelo, tab5, tab6, tab7 = tabs_obj
 else:
