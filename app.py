@@ -521,76 +521,109 @@ if user_info['role'] == 'admin':
 
 # ── Tab 2: Banco de Questoes ──────────────────────────────────────────────────
 if selected_tab == '🗡️ Banco':
-    st.header("Seu Banco de Questoes")
+    st.markdown("""
+        <div style='background: rgba(0, 71, 49, 0.15); padding: 25px; border-radius: 15px; border-left: 5px solid #00ff9d; margin-bottom: 30px;'>
+            <h2 style='color: #00ff9d; margin-top: 0;'>🛡️ Arsenal de Questões</h2>
+            <p style='color: #888;'>Filtre por matéria, assunto e nível para iniciar sua preparação tática.</p>
+        </div>
+    """, unsafe_allow_html=True)
+
     all_questions: List[Dict[str, Any]] = get_all_questions()
+    
     if not all_questions:
-        st.write("Nenhuma questao no banco ainda. Faca o upload de um PDF primeiro.")
+        st.info("Nenhuma questão no banco ainda. Faça o upload de um PDF primeiro.")
     else:
-        st.write(f"Total de questoes cadastradas: **{len(all_questions)}**")
+        # --- FILTERS SECTION ---
+        with st.container():
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                subjects = sorted(list(set([q['subject'] for q in all_questions if q.get('subject')])))
+                selected_subj = st.selectbox("📚 Matéria", ["Todas"] + subjects)
+            
+            with col2:
+                subtopics_opts = ["Todos"]
+                if selected_subj != "Todas":
+                    subtopics_opts += sorted(list(set([q.get('subtopic', '') for q in all_questions if q.get('subject') == selected_subj and q.get('subtopic')])))
+                selected_subtopic = st.selectbox("🔍 Subtópico", subtopics_opts)
+            
+            with col3:
+                years = sorted(list(set([q.get('year', '') for q in all_questions if q.get('year')])), reverse=True)
+                selected_year = st.selectbox("📅 Ano", ["Todos"] + years)
+            
+            with col4:
+                diffs = ["Fácil", "Médio", "Difícil"]
+                selected_diff = st.selectbox("⚡ Dificuldade", ["Todas"] + diffs)
 
-        subjects = sorted(list(set([q['subject'] for q in all_questions if q.get('subject')])))
-        col_f1, col_f2 = st.columns(2)
-        with col_f1:
-            selected_subj = st.selectbox("Filtrar por Materia", ["Todas"] + subjects)
-        with col_f2:
-            subtopics_opts = ["Todos"]
-            if selected_subj != "Todas":
-                subtopics_opts += sorted(list(set([q.get('subtopic', '') for q in all_questions if q.get('subject') == selected_subj and q.get('subtopic')])))
-            selected_subtopic = st.selectbox("Filtrar por Subtópico", subtopics_opts)
+        st.markdown("---")
+        
+        # --- VER QUESTOES BUTTON ---
+        if st.button("🚀 Ver Questões Selecionadas", use_container_width=True):
+            st.session_state.show_arsenal = True
+            
+        if st.session_state.get('show_arsenal'):
+            filtered_q = []
+            for q in all_questions:
+                if selected_subj != "Todas" and q.get('subject') != selected_subj:
+                    continue
+                if selected_subtopic != "Todos" and q.get('subtopic') != selected_subtopic:
+                    continue
+                if selected_year != "Todos" and q.get('year') != selected_year:
+                    continue
+                if selected_diff != "Todas":
+                    # Simple normalization for comparison
+                    q_diff = (q.get('difficulty') or "").lower().replace('á', 'a')
+                    s_diff = selected_diff.lower().replace('á', 'a')
+                    if q_diff != s_diff:
+                        continue
+                filtered_q.append(q)
 
-        for q in all_questions:
-            if selected_subj != "Todas" and q.get('subject') != selected_subj:
-                continue
-            if selected_subtopic != "Todos" and q.get('subtopic') != selected_subtopic:
-                continue
+            if not filtered_q:
+                st.warning("Nenhuma questão encontrada com esses filtros.")
+            else:
+                st.success(f"Encontradas {len(filtered_q)} questões.")
+                for q in filtered_q:
+                    with st.expander(f"[{q['subject']}] {q['exam_origin']} {q['year']} - {q['difficulty']}"):
+                        if q.get('has_image'):
+                            st.markdown("🖼️ **Esta questão contém figura/gráfico**:")
+                            img_path = q.get('image_path', '')
+                            if img_path and os.path.exists(img_path):
+                                st.image(img_path, use_container_width=True)
+                            else:
+                                st.warning("Imagem da página não encontrada.")
+                            st.markdown("---")
 
-            with st.expander(f"[{q['subject']}] {q['exam_origin']} {q['year']} - Dificuldade: {q['difficulty']}"):
-                if q.get('has_image'):
-                    st.markdown("🖼️ **Esta questao contem figura/grafico** — imagem da pagina original abaixo:")
-                    img_path = q.get('image_path', '')
-                    if img_path and os.path.exists(img_path):
-                        st.image(img_path, use_container_width=True)
-                    else:
-                        st.warning("Imagem da pagina nao encontrada (pode ter sido movida ou deletada).")
-                    st.markdown("---")
+                        st.write(q['question_text'])
+                        st.markdown("---")
+                        
+                        cols = st.columns(1)
+                        sorted_letters = sorted(q['options'].keys())
+                        for letter in sorted_letters:
+                            text = q['options'][letter]
+                            if letter == q.get('correct_answer_letter'):
+                                st.success(f"**{letter}) {text} - Correta**")
+                            else:
+                                st.markdown(f"{letter}) {text}")
 
-                st.write(q['question_text'])
-                st.markdown("---")
-                sorted_letters = sorted(q['options'].keys())
-                for letter in sorted_letters:
-                    text = q['options'][letter]
-                    if letter == q.get('correct_answer_letter'):
-                        st.success(f"**{letter}) {text} - Correta**")
-                    else:
-                        st.markdown(f"{letter}) {text}")
-
-                st.markdown("---")
-
-                q_id = q['id']
-                if q.get('resolution_1') or q.get('resolution_2'):
-                    st.markdown("🧠 **Resolucoes da IA**")
-                    if q.get('resolution_1'):
-                        with st.expander("Resolucao 1 (Passo a Passo)"):
-                            st.markdown(q['resolution_1'])
-                    if q.get('resolution_2'):
-                        with st.expander("Resolucao 2 (Metodo Rapido / Alternativo)"):
-                            st.markdown(q['resolution_2'])
-                else:
-                    if st.button("🧠 Gerar Resolucao com IA", key=f"res_{q_id}"):
-                        if not os.getenv("GEMINI_API_KEY"):
-                            st.error("Chave da API nao configurada. Va em Configuracoes.")
+                        st.markdown("---")
+                        q_id = q['id']
+                        if q.get('resolution_1') or q.get('resolution_2'):
+                            st.markdown("🧠 **Resoluções da IA**")
+                            if q.get('resolution_1'):
+                                with st.expander("Resolução 1 (Passo a Passo)"):
+                                    st.markdown(q['resolution_1'])
+                            if q.get('resolution_2'):
+                                with st.expander("Resolução 2 (Bizú Mental)"):
+                                    st.markdown(q['resolution_2'])
                         else:
-                            with st.spinner("Gerando resolucoes... aguarde!"):
-                                try:
-                                    result = generate_resolution(q['question_text'], q['options'])
-                                    update_resolution(q_id, result['resolution_1'], result['resolution_2'])
-                                    st.success("Resolucoes geradas e salvas!")
-                                    with st.expander("Resolucao 1 (Passo a Passo)"):
-                                        st.markdown(result['resolution_1'])
-                                    with st.expander("Resolucao 2 (Metodo Rapido)"):
-                                        st.markdown(result['resolution_2'])
-                                except Exception as e:
-                                    st.error(f"Erro ao gerar resolucao: {e}")
+                            if st.button("🧠 Gerar Resolução IA", key=f"res_bank_{q_id}"):
+                                with st.spinner("Decifrando..."):
+                                    try:
+                                        result = generate_resolution(q['question_text'], q['options'])
+                                        update_resolution(q_id, result['resolution_1'], result['resolution_2'])
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Erro: {e}")
 
 # ── Tab 3: Gerar Simulado ─────────────────────────────────────────────────────
 if selected_tab == '📄 Missões':
