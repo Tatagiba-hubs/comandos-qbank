@@ -214,29 +214,33 @@ st.markdown(f"""
     }}
 
     /* Hiding ONLY the radio circle/dot safely */
-    [data-testid="stSidebar"] div[role="radiogroup"] label div:first-child {{
-        min-width: 0 !important;
-        width: 0 !important;
-        height: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        visibility: hidden !important;
-        display: none !important;
-    }}
-
-    [data-testid="stSidebar"] div[role="radiogroup"] label > div:nth-child(2) {{
+    [data-testid="stSidebar"] div[role="radiogroup"] label [data-testid="stMarkdownContainer"] {{
+        opacity: 1 !important;
+        display: block !important;
+        visibility: visible !important;
         width: 100% !important;
     }}
 
+    /* Target the radio circle specifically by its typical attributes */
+    [data-testid="stSidebar"] div[role="radiogroup"] label div[data-testid="stMarkdownContainer"] - div,
+    [data-testid="stSidebar"] div[role="radiogroup"] label div:first-child:not(:has(p)) {{
+        display: none !important;
+    }}
+    
+    /* If the above failed, this is a fallback that only hides the circle itself */
+    [data-testid="stSidebar"] div[role="radiogroup"] [role="presentation"] {{
+        display: none !important;
+    }}
+
     [data-testid="stSidebar"] div[role="radiogroup"] > label:hover {{
-        background-color: rgba(255,255,255,0.05) !important;
+        background-color: rgba(255,255,255,0.08) !important;
     }}
 
     /* Selected Item Highlight */
     [data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) {{
         background-color: #3e735d !important;
         color: #ffffff !important;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.4) !important;
     }}
     
     [data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) p {{
@@ -245,11 +249,9 @@ st.markdown(f"""
     }}
 
     [data-testid="stSidebar"] div[role="radiogroup"] > label p {{
-        font-size: 16px !important;
+        font-size: 18px !important;
         margin: 0 !important;
         white-space: nowrap !important;
-        color: inherit !important;
-        opacity: 1 !important;
         display: block !important;
         visibility: visible !important;
     }}

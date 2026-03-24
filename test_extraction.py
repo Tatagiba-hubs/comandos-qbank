@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from ai_extractor import configure_api, _call_gemini_with_retry, question_schema
 import google.generativeai as genai
 
-pdf_path = r"C:\Users\joaot\Downloads\67022bd6-f1bb-43e6-952b-0d8a95e90f23.pdf"
+pdf_path = r"temp_67022bd6-f1bb-43e6-952b-0d8a95e90f23.pdf"
 
 print(f"Abrindo PDF: {pdf_path}")
 try:
@@ -24,7 +24,7 @@ try:
     
     configure_api()
     model = genai.GenerativeModel(
-        model_name='gemini-1.5-flash',
+        model_name='gemini-flash-latest',
         generation_config={
             "response_mime_type": "application/json",
             "response_schema": question_schema

@@ -116,7 +116,7 @@ def extract_questions_from_pdf(pdf_path: str, progress_callback=None):
     all_questions = []
 
     model = genai.GenerativeModel(
-        model_name='gemini-2.0-flash-exp',
+        model_name='gemini-flash-latest',
         generation_config={
             "response_mime_type": "application/json",
             "response_schema": question_schema
