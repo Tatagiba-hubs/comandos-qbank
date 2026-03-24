@@ -17,12 +17,43 @@ if hasattr(sys.stdout, 'reconfigure'):
 
 IMAGES_DIR = os.path.join(os.path.dirname(__file__), "question_images")
 
+class KeyManager:
+    _keys = []
+    _current_idx = 0
+
+    @classmethod
+    def load_keys(cls):
+        load_dotenv(override=True)
+        raw_keys = os.getenv("GEMINI_API_KEY", "")
+        if not raw_keys:
+            return []
+        # Support comma-separated keys
+        cls._keys = [k.strip() for k in raw_keys.split(",") if k.strip()]
+        return cls._keys
+
+    @classmethod
+    def get_current_key(cls):
+        if not cls._keys:
+            cls.load_keys()
+        if not cls._keys:
+            return None
+        return cls._keys[cls._current_idx]
+
+    @classmethod
+    def rotate_key(cls):
+        if not cls._keys:
+            return None
+        cls._current_idx = (cls._current_idx + 1) % len(cls._keys)
+        new_key = cls._keys[cls._current_idx]
+        print(f"[INFO] Rotacionando para nova chave API (Index {cls._current_idx})")
+        genai.configure(api_key=new_key)
+        return new_key
+
 def configure_api():
-    load_dotenv()
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
+    key = KeyManager.get_current_key()
+    if not key:
         raise ValueError("GEMINI_API_KEY is missing in .env file.")
-    genai.configure(api_key=api_key)
+    genai.configure(api_key=key)
 
 # ── Extraction schema ──────────────────────────────────────────────────────────
 question_schema = {
@@ -85,7 +116,7 @@ def _render_pages_to_images(doc, start_page: int, end_page: int) -> list:
 # ── Intelligent retry helper ──────────────────────────────────────────────────
 def _call_gemini_with_retry(model, content, max_retries: int = 5):
     """
-    Call Gemini with exponential backoff + jitter.
+    Call Gemini with exponential backoff + jitter and Key Rotation.
     Returns (response, None) on success or (None, error_message) on final failure.
     """
     base_delay = 4
@@ -94,9 +125,17 @@ def _call_gemini_with_retry(model, content, max_retries: int = 5):
             response = model.generate_content(content)
             return response, None
         except exceptions.ResourceExhausted:
+            # If we have multiple keys, try rotating even before sleeping
+            if len(KeyManager._keys) > 1:
+                KeyManager.rotate_key()
+                # If we still have retries, try immediately with new key
+                # but maybe with a small delay
+                time.sleep(1)
+                continue
+            
             if attempt == max_retries - 1:
                 return None, "Limite de cota atingido apos todas as tentativas."
-            # Exponential backoff with jitter
+            
             delay = base_delay * (2 ** attempt) + random.uniform(0, 2)
             print(f"[AVISO] Rate limit hit (tentativa {attempt + 1}/{max_retries}). "
                   f"Aguardando {delay:.1f}s...")
@@ -252,7 +291,7 @@ def extract_questions_from_pdf(pdf_path: str, progress_callback=None):
 def generate_resolution(question_text: str, options: dict) -> dict:
     configure_api()
     model = genai.GenerativeModel(
-        model_name='gemini-2.0-flash-exp',
+        model_name='gemini-flash-latest',
         generation_config={
             "response_mime_type": "application/json",
             "response_schema": resolution_schema
@@ -276,17 +315,21 @@ def generate_resolution(question_text: str, options: dict) -> dict:
 def generate_custom_questions(exam_origin: str, subject: str, subtopic: str, difficulty: str, num_questions: int) -> list:
     configure_api()
     model = genai.GenerativeModel(
-        model_name='gemini-2.0-flash-exp',
+        model_name='gemini-flash-latest',
         generation_config={
             "response_mime_type": "application/json",
             "response_schema": question_schema
         }
     )
 
-    prompt = (f"Crie uma lista INÉDITA (autoral) de {num_questions} questões para concursos no estilo '{exam_origin}'.\n"
+    prompt = (f"Você é um professor militar experiente. Crie uma lista INÉDITA de {num_questions} questões "
+              f"objetivas para o concurso '{exam_origin}'.\n"
               f"Matéria: {subject}\nSubtópico: {subtopic}\nDificuldade: {difficulty}.\n"
-              f"As questões não devem requerer imagens (has_image=false).\n"
-              f"Forneça com muito capricho, criando enredos interessantes operacionais militares se for o caso.")
+              f"REGRAS:\n"
+              f"1. As questões devem seguir o padrão de {exam_origin} rigorosamente.\n"
+              f"2. Cada questão deve ter 5 alternativas (A, B, C, D, E).\n"
+              f"3. Marque has_image=false e ignore bboxes.\n"
+              f"4. GERE APENAS O ARRAY JSON solicitado no schema.")
 
     response, err = _call_gemini_with_retry(model, prompt, max_retries=3)
     if err:
@@ -294,19 +337,23 @@ def generate_custom_questions(exam_origin: str, subject: str, subtopic: str, dif
         return []
     
     try:
+        # Check if response.text is valid JSON
         parsed = json.loads(response.text)
         if isinstance(parsed, list):
             for q in parsed:
-                # Normaliza campos
+                # Normalize common fields
                 q["page_number"] = 1
                 q["has_image"] = False
                 q["image_path"] = ""
-                q["resolution_1"] = ""
-                q["resolution_2"] = ""
+                q["resolution_1"] = q.get("resolution_1", "")
+                q["resolution_2"] = q.get("resolution_2", "")
+                # Ensure exam_origin is set if not provided
+                if not q.get("exam_origin"):
+                    q["exam_origin"] = exam_origin
             return parsed
         return []
     except Exception as e:
-        print(f"[ERRO] Parse failed: {e}")
+        print(f"[ERRO] Parse failed for: {response.text[:200]}... Erro: {e}")
         return []
 
 def analyze_discursive_image(question_text: str, image_bytes: bytes = None) -> str:
@@ -323,20 +370,18 @@ def analyze_discursive_image(question_text: str, image_bytes: bytes = None) -> s
                   f"4. Dê uma nota ou pontuação no padrão militar rigoroso.")
         
         image_part = {"mime_type": "image/jpeg", "data": image_bytes}
-        try:
-            response = model.generate_content([prompt, image_part])
-            return response.text
-        except Exception as e:
-            return f"Erro na análise: {str(e)}"
+        response, err = _call_gemini_with_retry(model, [prompt, image_part], max_retries=3)
+        if err:
+            return f"Erro na análise: {err}"
+        return response.text
     else:
         prompt = (f"Esta é uma questão discursiva e o aluno não enviou foto da resolução.\n"
                   f"QUESTÃO: {question_text}\n"
                   f"Por favor, apresente o padrão de resposta (gabarito) detalhado, passo a passo, mostrando toda a dedução lógica e algébrica esperada por uma banca militar rigorosa.")
-        try:
-            response = model.generate_content(prompt)
-            return response.text
-        except Exception as e:
-            return f"Erro na formatação do padrão de resposta: {str(e)}"
+        response, err = _call_gemini_with_retry(model, prompt, max_retries=3)
+        if err:
+            return f"Erro na formatação do padrão de resposta: {err}"
+        return response.text
 
 def evaluate_essay(essay_text: str, theme: str = "Tema livre", image_bytes: bytes = None) -> str:
     configure_api()
@@ -356,11 +401,10 @@ def evaluate_essay(essay_text: str, theme: str = "Tema livre", image_bytes: byte
     if image_bytes:
         parts.append({"mime_type": "image/jpeg", "data": image_bytes})
         
-    try:
-        response = model.generate_content(parts)
-        return response.text
-    except Exception as e:
-        return f"Erro na correção da redação: {str(e)}"
+    response, err = _call_gemini_with_retry(model, parts, max_retries=3)
+    if err:
+        return f"Erro na correção da redação: {err}"
+    return response.text
 
 if __name__ == "__main__":
     pass

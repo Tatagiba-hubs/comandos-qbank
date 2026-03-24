@@ -1152,9 +1152,12 @@ if user_info['role'] == 'admin':
         st.markdown("Gere sua chave gratuita em: [Google AI Studio](https://aistudio.google.com/app/apikey)")
 
         current_key = os.getenv("GEMINI_API_KEY", "")
-        new_key = st.text_input("Cole sua Chave da API aqui", value=current_key, type="password")
+        new_key = st.text_input("Cole sua(s) Chave(s) da API aqui", 
+                               value=current_key, 
+                               type="password",
+                               help="Você pode colocar várias chaves separadas por vírgula (ex: chave1, chave2) para evitar limites de cota.")
 
-        if st.button("Salvar Chave"):
+        if st.button("Salvar Chave(s)"):
             env_path = os.path.join(os.path.dirname(__file__), ".env")
             with open(env_path, "w", encoding="utf-8") as f:
                 f.write(f"GEMINI_API_KEY={new_key}\n")
